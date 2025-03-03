@@ -9,6 +9,8 @@ if (!process.env.AIRTABLE_API_KEY || !process.env.AIRTABLE_BASE_ID) {
 module.exports = {
   airtableApiKey: process.env.AIRTABLE_API_KEY,
   airtableBaseId: process.env.AIRTABLE_BASE_ID,
-  corsOrigin: process.env.CORS_ORIGIN || "*",
+  corsOrigin: process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(",")
+    : "*",
   port: process.env.PORT || 3000,
 };
