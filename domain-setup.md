@@ -158,7 +158,21 @@ ufw allow https
 ufw enable
 ```
 
-## 7. Test Your Setup
+## 7. Fix WebSocket Connection for HTTPS
+
+After setting up HTTPS, you need to fix the WebSocket connection to work over secure WebSockets (wss://). Run the provided script:
+
+```bash
+./fix-websocket.sh
+```
+
+This script will:
+
+1. Update the Nginx configuration to properly handle WebSocket connections over HTTPS
+2. Rebuild the application with the updated WebSocket URL
+3. Restart Nginx to apply the changes
+
+## 8. Test Your Setup
 
 After completing all the steps and waiting for DNS propagation, visit:
 

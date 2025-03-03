@@ -111,7 +111,9 @@ onMount(async () => {
         // Use the server IP address for production
         const socketUrl = window.location.hostname === 'localhost'
             ? 'ws://localhost:3000'
-            : `ws://${window.location.hostname}:3000`;
+            : window.location.protocol === 'https:'
+                ? `wss://${window.location.hostname}/socket.io`
+                : `ws://${window.location.hostname}:3000`;
         const socket = initSocket(socketUrl);
         console.log('Socket initialization requested', socket.id);
 
