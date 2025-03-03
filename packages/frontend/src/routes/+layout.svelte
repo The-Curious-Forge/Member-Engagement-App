@@ -108,8 +108,11 @@ onMount(async () => {
     // Initialize WebSocket connection
     try {
         console.log('Initializing socket connection...');
-        // Use the same port as our backend
-        const socket = initSocket('ws://localhost:3000');
+        // Use the server IP address for production
+        const socketUrl = window.location.hostname === 'localhost'
+            ? 'ws://localhost:3000'
+            : `ws://${window.location.hostname}:3000`;
+        const socket = initSocket(socketUrl);
         console.log('Socket initialization requested', socket.id);
 
         // Set up socket event listeners

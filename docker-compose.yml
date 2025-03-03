@@ -14,7 +14,7 @@ services:
       - AIRTABLE_BASE_ID=${AIRTABLE_BASE_ID}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - GOOGLE_CALENDAR_ID=${GOOGLE_CALENDAR_ID}
-      - CORS_ORIGIN=http://localhost:5174
+      - CORS_ORIGIN=http://64.23.142.177:5174
     volumes:
       - ./packages/backend:/app
       - /app/node_modules
