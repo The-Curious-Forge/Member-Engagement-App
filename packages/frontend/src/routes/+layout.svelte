@@ -112,7 +112,7 @@ onMount(async () => {
         const socketUrl = window.location.hostname === 'localhost'
             ? 'ws://localhost:3000'
             : window.location.protocol === 'https:'
-                ? `wss://${window.location.hostname}/socket.io`
+                ? `wss://${window.location.hostname}`
                 : `ws://${window.location.hostname}:3000`;
         const socket = initSocket(socketUrl);
         console.log('Socket initialization requested', socket.id);
