@@ -1,5 +1,6 @@
 import { writable, derived, type Writable } from 'svelte/store';
 import { offlineStorage, STORES } from '../lib/offline';
+import { generateId } from '../utils/idUtils';
 
 // Types
 interface MemberType {
@@ -733,7 +734,7 @@ const kudosActions = {
 	add: async (newKudos: Omit<Kudos, 'id' | 'date'>) => {
 		const kudosEntry = {
 			...newKudos,
-			id: crypto.randomUUID(),
+			id: generateId(),
 			date: new Date().toISOString()
 		};
 		kudos.update((k) => [kudosEntry, ...k]);
@@ -746,7 +747,7 @@ const messageActions = {
 	send: async (newMessage: Omit<Message, 'id' | 'timestamp'>) => {
 		const messageEntry = {
 			...newMessage,
-			id: crypto.randomUUID(),
+			id: generateId(),
 			timestamp: new Date()
 		};
 		messages.update((m) => [messageEntry, ...m]);
@@ -813,7 +814,7 @@ const messageActions = {
 const systemAlertActions = {
 	add: async (type: SystemAlert['type'], message: string) => {
 		const newAlert = {
-			id: crypto.randomUUID(),
+			id: generateId(),
 			type,
 			message,
 			timestamp: new Date()
@@ -842,7 +843,7 @@ const systemAlertActions = {
 const airtableAlertActions = {
 	add: async (type: AirtableAlert['type'], content: string, expirationDate: Date | null = null) => {
 		const newAlert = {
-			id: crypto.randomUUID(),
+			id: generateId(),
 			type,
 			content,
 			timestamp: new Date(),

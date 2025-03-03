@@ -9,6 +9,7 @@ import type {
 	CalendarEvent,
 	MonthlyRecognition
 } from '../stores/appStore';
+import { generateId } from '../utils/idUtils';
 
 // Service Worker types
 interface SyncManager {
@@ -277,7 +278,7 @@ export const pendingActions = {
 	async add(action: Omit<PendingAction, 'id' | 'timestamp'>) {
 		const pendingAction: PendingAction = {
 			...action,
-			id: crypto.randomUUID(),
+			id: generateId(),
 			timestamp: new Date()
 		};
 		await offlineStorage.store(STORES.pendingActions, pendingAction);
