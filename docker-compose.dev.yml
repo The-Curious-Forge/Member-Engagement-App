@@ -1,0 +1,47 @@
+services:
+  backend:
+    build:
+      context: ./packages/backend
+      dockerfile: Dockerfile
+    container_name: member-engagement-backend-dev
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - AIRTABLE_API_KEY=${AIRTABLE_API_KEY}
+      - AIRTABLE_BASE_ID=${AIRTABLE_BASE_ID}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_CALENDAR_ID=${GOOGLE_CALENDAR_ID}
+      - CORS_ORIGIN=http://localhost:5174
+    volumes:
+      - ./packages/backend:/app
+      - /app/node_modules
+    networks:
+      - app-network
+    command: npm run dev
+
+  frontend:
+    build:
+      context: ./packages/frontend
+      dockerfile: Dockerfile.dev
+    container_name: member-engagement-frontend-dev
+    restart: unless-stopped
+    ports:
+      - "5174:5174"
+    depends_on:
+      - backend
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./packages/frontend:/app
+      - /app/node_modules
+      - /app/.svelte-kit
+    networks:
+      - app-network
+    command: npm run dev
+
+networks:
+  app-network:
+    driver: bridge

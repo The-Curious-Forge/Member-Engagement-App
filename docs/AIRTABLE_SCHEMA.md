@@ -79,6 +79,8 @@ Used for sign-out sliders (members allocate time spent across multiple activitie
 - **Read Date** (date/time, set when user views or marks it as read)
 - **Important** (checkbox)
 - **App Notification** (checkbox to display it as a banner notification on the home screen)
+- **Attachment** (attactchment field for images in messages)
+- **QRLink** (URL field for links that will be displayed as QR codes)
 
 ---
 
@@ -119,13 +121,19 @@ This table is for messages that members send to staff/office.
 - **Month** (date picker, set to a specific month)
 - **Member of the Month** (linked to **mastersheet**)
 - **Member Recognition Reason** (long text)
+- **Project of the Month** (Single Text)
+- **Project Descrription** (Long text)
+- **Project Photos** (Attachments)
+- **Project Member(s)** (linked to **mastersheet**)
 
 ---
 
 ## Mentors (Table: "Mentors")
 
 - **Mentor** (linked to **mastersheet**)
-- **Area** (linked to an Areas table, or text, indicating which studio(s) or area(s) they mentor)
+- **Number** (lookup table with the cell phone number)
+- **Email** (lookup table with the email)
+- **Area** (single-select field)
 
 ---
 
