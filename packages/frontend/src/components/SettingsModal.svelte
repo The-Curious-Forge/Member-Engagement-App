@@ -52,12 +52,14 @@
         z-index: 1000;
         opacity: 0;
         pointer-events: none;
-        transition: opacity 0.2s ease;
+        visibility: hidden;
+        transition: opacity 0.2s ease, visibility 0.2s ease;
     }
 
     .modal-overlay.visible {
         opacity: 1;
         pointer-events: auto;
+        visibility: visible;
     }
 
     .modal-content {

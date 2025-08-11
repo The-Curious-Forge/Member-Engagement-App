@@ -5,10 +5,11 @@ export default defineConfig({
 	plugins: [sveltekit()],
 	server: {
 		port: 5174,
+		host: true,
 		strictPort: true,
 		proxy: {
 			'/api': {
-				target: 'http://localhost:3000',
+				target: 'http://backend:3000',
 				changeOrigin: true,
 				secure: false,
 				// Keep request path when proxying
@@ -27,7 +28,7 @@ export default defineConfig({
 				}
 			},
 			'/socket.io': {
-				target: 'http://localhost:3000',
+				target: 'http://backend:3000',
 				ws: true
 			}
 		}
