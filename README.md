@@ -1,113 +1,133 @@
-# Member Engagement App - Docker Setup
+# Member Engagement App (The Curious Forge)
 
-This repository has been dockerized to make deployment and development easier. The application consists of a Node.js backend and a SvelteKit frontend.
+This repository contains the source code for the Member Engagement Kiosk used by The Curious Forge. It provides a touchscreen kiosk UI for sign-in/out, kudos, messages, and realtime sync across devices.
 
-## Prerequisites
+Quick links
 
-- [Docker](https://docs.docker.com/get-docker/)
-- [Docker Compose](https://docs.docker.com/compose/install/)
+- Docs: [`docs/README.md`](docs/README.md:1)
+- Airtable schema: [`docs/AIRTABLE_SCHEMA.md`](docs/AIRTABLE_SCHEMA.md:1)
+- Backend entry: [`packages/backend/index.js`](packages/backend/index.js:1)
+- Frontend offline layer: [`packages/frontend/src/lib/offline.ts`](packages/frontend/src/lib/offline.ts:1)
+- Service worker: [`packages/frontend/static/service-worker.js`](packages/frontend/static/service-worker.js:1)
 
-## Environment Variables
+Table of contents
 
-The application uses environment variables for configuration. These are stored in the `.env` file in the root directory. Make sure to update these values as needed:
+- [Quickstart](#quickstart)
+- [Environment variables](#environment-variables)
+- [Architecture overview](#architecture-overview)
+- [Key concepts](#key-concepts)
+- [Developer workflow](#developer-workflow)
+- [File layout](#file-layout)
+- [API reference](#api-reference)
+- [Airtable integration](#airtable-integration)
+- [Troubleshooting & tips](#troubleshooting--tips)
 
-```
-AIRTABLE_API_KEY=your_airtable_api_key
-AIRTABLE_BASE_ID=your_airtable_base_id
-GOOGLE_API_KEY=your_google_api_key
-GOOGLE_CALENDAR_ID=your_google_calendar_id
-```
+Quickstart
 
-## Running the Application
+Development (recommended using Docker Compose)
 
-### Development Mode
-
-To run the application in development mode with hot reloading:
+1. Copy `.env.example` to `.env` and fill in keys.
+2. Start dev containers:
 
 ```bash
 docker-compose -f docker-compose.dev.yml up
 ```
 
-This will start both the backend and frontend services with volumes mounted for live code reloading.
+- Frontend: http://localhost:5174
+- Backend API: http://localhost:3000
 
-### Production Mode
-
-To build and run the application for production:
+Production (build and serve)
 
 ```bash
 docker-compose up --build
 ```
 
-### Running in Background
+Running without Docker (local Node/Svelte)
 
-To run the containers in the background:
-
-```bash
-docker-compose up -d
-```
-
-Or for development:
+- Backend:
 
 ```bash
-docker-compose -f docker-compose.dev.yml up -d
+cd packages/backend
+npm install
+npm run dev
 ```
 
-### Stopping the Application
-
-To stop the running containers:
+- Frontend:
 
 ```bash
-docker-compose down
+cd packages/frontend
+npm install
+npm run dev
 ```
 
-Or for development:
+Environment variables
 
-```bash
-docker-compose -f docker-compose.dev.yml down
-```
+Create a `.env` in repo root (example in [`.env.example`](.env.example:1)):
 
-## Accessing the Application
+Required variables:
 
-- Frontend: http://localhost:5174
-- Backend API: http://localhost:3000
+- AIRTABLE_API_KEY
+- AIRTABLE_BASE_ID
+- GOOGLE_API_KEY
+- GOOGLE_CALENDAR_ID
 
-## Container Structure
+See [`packages/backend/services/airtableClient.js`](packages/backend/services/airtableClient.js:1) for table names used by the backend.
 
-- **Backend**: Node.js Express server running on port 3000
-- **Frontend**: SvelteKit application running on port 5174
+Architecture overview
 
-## Rebuilding Containers
+The project uses a simple three-tier architecture:
 
-If you make changes to the Dockerfiles or need to rebuild the containers:
+- Frontend: SvelteKit application providing the kiosk UI. Key client features:
+  - Offline-first data using IndexedDB via [`packages/frontend/src/lib/offline.ts`](packages/frontend/src/lib/offline.ts:1)
+  - Background sync and caching via a service worker: [`packages/frontend/static/service-worker.js`](packages/frontend/static/service-worker.js:1)
+  - Centralized client stores in [`packages/frontend/src/stores/appStore.ts`](packages/frontend/src/stores/appStore.ts:1)
+- Backend: Node.js + Express server that proxies and consolidates Airtable access, exposes REST endpoints, and emits realtime events via Socket.IO. Entry point: [`packages/backend/index.js`](packages/backend/index.js:1)
+- Airtable: Source of truth hosting tables for members, signed-in records, kudos, messages, activities, and more. Schema documented at [`docs/AIRTABLE_SCHEMA.md`](docs/AIRTABLE_SCHEMA.md:1)
 
-```bash
-docker-compose build
-```
+Key concepts
 
-Or to rebuild a specific service:
+- Offline-first
+  - The frontend caches entities in IndexedDB (see [`packages/frontend/src/lib/offline.ts`](packages/frontend/src/lib/offline.ts:1)).
+  - User actions performed while offline (sign-outs, kudos, messages) are queued as "pending actions" and synchronized by the service worker when connectivity is restored.
+- Real-time updates
+  - Backend emits events (e.g., signInUpdate, signOutUpdate) via Socket.IO.
+  - Client socket handlers wired in [`packages/frontend/src/services/memberAuthService.ts`](packages/frontend/src/services/memberAuthService.ts:1) update stores immediately on events.
+- Airtable abstraction
+  - Backend uses [`packages/backend/services/airtableClient.js`](packages/backend/services/airtableClient.js:1) to centralize table names and create an Airtable base instance.
 
-```bash
-docker-compose build backend
-docker-compose build frontend
-```
+Backend: routes and services
 
-## Viewing Logs
+- Routes are under `packages/backend/routes/*`. The server exposes endpoints for:
+  - POST /api/signIn — sign a member in (see [`packages/backend/routes/signIn.js`](packages/backend/routes/signIn.js:1))
+  - POST /api/signOut — sign a member out and record use-log
+  - /api/members/\* — members, signed-in members, monthly recognition, etc.
+  - /api/kudos — create and list kudos
+  - /api/messages — create and list messages
+  - /api/alerts — combined system + Airtable alerts
 
-To view the logs of the running containers:
+Services under `packages/backend/services/*` encapsulate Airtable logic (e.g., [`packages/backend/services/membersService.js`](packages/backend/services/membersService.js:1), [`packages/backend/services/kudosService.js`](packages/backend/services/kudosService.js:1), [`packages/backend/services/messagesService.js`](packages/backend/services/messagesService.js:1)).
 
-```bash
-docker-compose logs
-```
+Frontend: stores, offline, and sync
 
-To follow the logs:
+- Central stores live in [`packages/frontend/src/stores/appStore.ts`](packages/frontend/src/stores/appStore.ts:1). They:
+  - provide fetch functions that use the network when online and fallback to IndexedDB when offline
+  - publish derived values such as activeMembers and connectionStatus
+- Offline utilities are implemented in [`packages/frontend/src/lib/offline.ts`](packages/frontend/src/lib/offline.ts:1) and manage:
+  - IndexedDB schema and operations
+  - Pending action queue and ServiceWorker registration
+- Service worker implements:
+  - network-first caching for API endpoints and background sync for pending actions (see [`packages/frontend/static/service-worker.js`](packages/frontend/static/service-worker.js:1))
+- Socket handling and member auth are in [`packages/frontend/src/services/memberAuthService.ts`](packages/frontend/src/services/memberAuthService.ts:1)
 
-```bash
-docker-compose logs -f
-```
+Development workflow
 
-To view logs for a specific service:
+- Use Docker Compose for fast local setup. The development compose mounts source into containers for live reload.
+- Backend: use `npm run dev` (nodemon) to restart on changes.
+- Frontend: use `npm run dev` to start Svelte dev server.
+- When working with Airtable data, use a separate test base or a branch table to avoid polluting production data.
 
-```bash
-docker-compose logs backend
-docker-compose logs frontend
-```
+Debugging tips
+
+- Backend logs: check container logs or run `node index.js` locally; errors are logged and returned as JSON.
+- Frontend: open browser console and watch service worker & IndexedDB operations (see `console.log` statements in [`packages/frontend/src/lib/offline.ts`](packages/frontend/src/lib/offline.ts:1) and [`packages/frontend/static/service-worker.js`](packages/frontend/static/service-worker.js:1)).
+- Socket.IO: connection state is exposed in [`packages/frontend/src/stores/connectionStore.ts`](packages/frontend/src/stores/connectionStore.ts:1)

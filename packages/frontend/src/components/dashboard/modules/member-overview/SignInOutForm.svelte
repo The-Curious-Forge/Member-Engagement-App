@@ -251,20 +251,21 @@
         grid-template-columns: repeat(3, 1fr);
         gap: 1rem;
         padding: 0.5rem;
-        padding-bottom: 5rem;
+        margin-bottom: 1rem; /* Space before footer */
         height: 100%;
         overflow-y: auto;
+        min-height: 0;
+        flex: 1;
     }
 
     .activities-footer {
-        position: absolute;
+        position: sticky;
         bottom: 0;
-        left: 0;
-        right: 0;
         padding: 1rem;
         background: white;
         border-top: 1px solid rgba(0, 0, 0, 0.08);
         z-index: 10;
+        margin-top: auto;
     }
 
     .footer-content {
