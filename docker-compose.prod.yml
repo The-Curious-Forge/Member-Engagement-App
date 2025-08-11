@@ -1,0 +1,8 @@
+services:
+  backend:
+    environment:
+      # In production, the frontend is accessed via the domain, not localhost.
+      # Nginx handles the routing, so the backend will receive requests from the nginx service.
+      # However, for the preflight requests (OPTIONS) that the browser sends,
+      # the Origin header will be the domain.
+      - CORS_ORIGIN=https://signin.thecuriousforge.org
