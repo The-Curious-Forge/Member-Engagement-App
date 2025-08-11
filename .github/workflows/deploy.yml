@@ -3,7 +3,7 @@ name: Deploy to DigitalOcean Droplet
 on:
   push:
     branches:
-      - main # Change this to 'live' if you decide to use a live branch
+      - main
 
 env:
   REGISTRY: ghcr.io
