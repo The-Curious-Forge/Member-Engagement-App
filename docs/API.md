@@ -2,15 +2,15 @@
 
 This file documents the main HTTP endpoints and Socket.IO events exposed by the backend, plus example request/response payloads to help developers integrate with the server.
 
-Backend entry: [`packages/backend/index.js`](packages/backend/index.js:1) — all routes are mounted under `/api`.
+Backend entry: [`packages/backend/index.js`](packages/backend/index.js) — all routes are mounted under `/api`.
 
 Important files
 
-- Routes: [`packages/backend/routes/`](packages/backend/routes/:1)
-- Members service: [`packages/backend/services/membersService.js`](packages/backend/services/membersService.js:1)
-- Kudos service: [`packages/backend/services/kudosService.js`](packages/backend/services/kudosService.js:1)
-- Messages service: [`packages/backend/services/messagesService.js`](packages/backend/services/messagesService.js:1)
-- Airtable table constants: [`packages/backend/services/airtableClient.js`](packages/backend/services/airtableClient.js:1)
+- Routes: [`packages/backend/routes/`](packages/backend/routes/)
+- Members service: [`packages/backend/services/membersService.js`](packages/backend/services/membersService.js)
+- Kudos service: [`packages/backend/services/kudosService.js`](packages/backend/services/kudosService.js)
+- Messages service: [`packages/backend/services/messagesService.js`](packages/backend/services/messagesService.js)
+- Airtable table constants: [`packages/backend/services/airtableClient.js`](packages/backend/services/airtableClient.js)
 
 Base URL
 
@@ -22,7 +22,7 @@ Common response envelope
   - { success: true, ... }
   - Or the requested resource directly (arrays/objects) depending on the route.
 
-HTTP Endpoints (examples)
+## HTTP Endpoints (examples)
 
 1. POST /api/signIn
 
@@ -32,10 +32,14 @@ HTTP Endpoints (examples)
 - Example:
   - POST /api/signIn
   - Body:
-    {
-    "memberId": "rec123...",
-    "memberTypeId": "rectype456..."
-    }
+
+```json
+{
+  "memberId": "rec123...",
+  "memberTypeId": "rectype456..."
+}
+```
+
 - Response:
   - { success: true, signInRecordId: "<airtable-record-id>" }
 - Notes:
@@ -45,14 +49,18 @@ HTTP Endpoints (examples)
 
 - Purpose: Remove a Signed In record and create a Use Log entry in Airtable. Accepts activity details for calculating totals.
 - Request body (from client patterns):
-  - {
-    signInRecordId: string,
-    memberId: string,
-    activities: Array<{ id: string, hours?: number, time?: number, points?: number }>,
-    totalHours?: number,
-    totalPoints?: number,
-    timestamp?: string
-    }
+
+```json
+{
+  "signInRecordId": "string",
+  "memberId": "string",
+  "activities": [{ "id": "string", "hours": 2, "time": 120000, "points": 0 }],
+  "totalHours": 2,
+  "totalPoints": 0,
+  "timestamp": "2025-08-11T15:00:00.000Z"
+}
+```
+
 - Response:
   - { success: true, useLogRecordId: "<airtable-record-id>" } (implementation-specific; backend returns created use-log id)
 - Notes:
@@ -62,27 +70,31 @@ HTTP Endpoints (examples)
 3. GET /api/members/allData
 
 - Purpose: Return consolidated member data with messages, kudos, activity counts, signed-in status, and member types.
-- Response:
-  - Array of Member objects:
-    [
-    {
-    id: string,
-    name: string,
-    memberTypes: [...],
-    totalHours: number,
-    totalPoints: number,
-    weeklyStreak: number,
-    forgeLevel: string,
-    memberBio: string,
-    headshot: string,
-    topActivities: [...],
-    messages: [...],
-    kudosGiven: [...],
-    kudosReceived: [...],
-    isSignedIn: boolean
-    },
-    ...
-    ]
+- Response: Array of Member objects.
+
+Example response:
+
+```json
+[
+  {
+    "id": "rec123...",
+    "name": "First Last",
+    "memberTypes": [],
+    "totalHours": 120,
+    "totalPoints": 50,
+    "weeklyStreak": 3,
+    "forgeLevel": "Apprentice",
+    "memberBio": "Short bio",
+    "headshot": "https://.../image.jpg",
+    "topActivities": ["Woodworking", "3D Printing"],
+    "messages": [],
+    "kudosGiven": [],
+    "kudosReceived": [],
+    "isSignedIn": false
+  }
+]
+```
+
 - Notes:
   - Implemented by `membersService.getAllMemberData()` which aggregates messages, kudos, signed-in members and types.
 
@@ -152,28 +164,36 @@ Notes about endpoints
 
 - Many GET endpoints return cached/aggregated Airtable data prepared by backend services for efficiency.
 - Backend protects Airtable API keys — client should never call Airtable directly.
-- Error handling: server has global error middleware that returns 500 JSON with either a friendly message (production) or error.message (non-production). See [`packages/backend/index.js`](packages/backend/index.js:1).
+- Error handling: server has global error middleware that returns 500 JSON with either a friendly message (production) or error.message (non-production). See [`packages/backend/index.js`](packages/backend/index.js).
 
-Socket.IO events (real-time)
+## Socket.IO events (real-time)
 
-- Server initializes Socket.IO in [`packages/backend/index.js`](packages/backend/index.js:1) and passes the `io` object to routes via middleware so route handlers can emit events to connected clients.
+- Server initializes Socket.IO in [`packages/backend/index.js`](packages/backend/index.js) and passes the `io` object to routes via middleware so route handlers can emit events to connected clients.
 
 Notable events used by frontend:
 
 1. signInUpdate
 
 - Emitted after a successful sign-in record creation.
-- Payload: the updated member object (see `getSignedInMembers()` / member mapping)
-  - Example:
-    {
-    id: "rec123...",
-    name: "First Last",
-    signInRecordId: "recSignedIn...",
-    signInTime: "2025-08-11T15:00:00.000Z",
-    signedInType: "recTypeId...",
-    currentMemberType: { id, group, sortingOrder },
-    currentArea: string | undefined
-    }
+- Payload: the updated member object (see `getSignedInMembers()` / member mapping).
+
+Example payload:
+
+```json
+{
+  "id": "rec123...",
+  "name": "First Last",
+  "signInRecordId": "recSignedIn...",
+  "signInTime": "2025-08-11T15:00:00.000Z",
+  "signedInType": "recTypeId...",
+  "currentMemberType": {
+    "id": "type1",
+    "group": "Woodshop",
+    "sortingOrder": 1
+  },
+  "currentArea": null
+}
+```
 
 2. signOutUpdate
 
@@ -183,12 +203,12 @@ Notable events used by frontend:
 
 Other events
 
-- The backend may emit additional events for kudos, messages, or system alerts when routes create new resources; consult route implementations for further events. The frontend subscribes to specific events in [`packages/frontend/src/services/memberAuthService.ts`](packages/frontend/src/services/memberAuthService.ts:1).
+- The backend may emit additional events for kudos, messages, or system alerts when routes create new resources; consult route implementations for further events. The frontend subscribes to specific events in [`packages/frontend/src/services/memberAuthService.ts`](packages/frontend/src/services/memberAuthService.ts).
 
 Client behavior & offline queue
 
 - When offline, the frontend stores pending actions in IndexedDB under `pendingActions`.
-- The service worker (`packages/frontend/static/service-worker.js`](packages/frontend/static/service-worker.js:1)) will attempt background sync using the SyncManager tag `sync-pending-actions` or process actions upon being messaged by the client.
+- The service worker (`packages/frontend/static/service-worker.js`](packages/frontend/static/service-worker.js)) will attempt background sync using the SyncManager tag `sync-pending-actions` or process actions upon being messaged by the client.
 - Pending action processing maps action types to endpoints:
   - signIn -> POST /api/signIn
   - signOut -> POST /api/signOut

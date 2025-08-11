@@ -1,161 +1,228 @@
 # Developer Guide
 
-This document helps new contributors understand the codebase, local development workflow, debugging tips, and deployment steps for the Member Engagement App (The Curious Forge).
+This guide explains the repository layout, local development workflow, debugging tips, and deployment guidance for the Member Engagement App (The Curious Forge).
 
-Summary
+Table of contents
 
-- Frontend: SvelteKit application with an offline-first architecture, IndexedDB caching and a service worker.
-- Backend: Node.js + Express server that proxies and consolidates Airtable access and emits realtime events via Socket.IO.
-- Airtable: Source of truth for members, sign-ins, kudos, messages, activities, and related tables.
+- [Quickstart (Docker)](#quickstart-docker)
+- [Quickstart (Local)](#quickstart-local)
+- [Environment variables](#environment-variables)
+- [Project layout](#project-layout)
+- [Backend: overview & routes](#backend-overview--routes)
+- [Frontend: stores, offline & sync](#frontend-stores-offline--sync)
+- [Offline-first flow (how it works)](#offline-first-flow-how-it-works)
+- [Service worker & background sync](#service-worker--background-sync)
+- [Realtime (Socket.IO) events](#realtime-socketio-events)
+- [Debugging & troubleshooting](#debugging--troubleshooting)
+- [Testing checklist](#testing-checklist)
+- [Deployment notes](#deployment-notes)
+- [Contributing & next steps](#contributing--next-steps)
+- [References](#references)
 
-Key repo references
+Quickstart (Docker)
 
-- Top-level docs: [`docs/README.md`](docs/README.md:1)
-- Backend entry: [`packages/backend/index.js`](packages/backend/index.js:1)
-- Backend services: [`packages/backend/services/`](packages/backend/services/:1)
-- Frontend stores & sync: [`packages/frontend/src/stores/appStore.ts`](packages/frontend/src/stores/appStore.ts:1)
-- Frontend offline layer: [`packages/frontend/src/lib/offline.ts`](packages/frontend/src/lib/offline.ts:1)
-- Service worker: [`packages/frontend/static/service-worker.js`](packages/frontend/static/service-worker.js:1)
-- Airtable schema: [`docs/AIRTABLE_SCHEMA.md`](docs/AIRTABLE_SCHEMA.md:1)
+1. Copy the example env:
 
-Prerequisites (local)
-
-- Node.js (recommended LTS)
-- npm (or yarn/pnpm)
-- Docker & Docker Compose (recommended for development)
-- An Airtable base and API key for integration testing (use a test base if possible)
-
-Environment variables
-Create a `.env` in the project root (see `.env.example`). Important variables:
-
-- AIRTABLE_API_KEY — Airtable API key used by backend
-- AIRTABLE_BASE_ID — Airtable base id
-- GOOGLE_API_KEY — for calendar features (optional)
-- GOOGLE_CALENDAR_ID — for calendar features (optional)
-
-Project layout (high level)
-
-- packages/backend — Express server, routes, and Airtable service layer
-  - [`packages/backend/index.js`](packages/backend/index.js:1) — server bootstrap and route wiring
-  - [`packages/backend/routes/`] — Express route handlers (e.g., signIn, signOut, members)
-  - [`packages/backend/services/`] — Airtable logic (membersService, kudosService, messagesService, etc.)
-  - [`packages/backend/services/airtableClient.js`](packages/backend/services/airtableClient.js:1) — Airtable base and table constants
-- packages/frontend — SvelteKit app and client-side logic
-  - [`packages/frontend/src/stores/appStore.ts`](packages/frontend/src/stores/appStore.ts:1) — central stores and sync functions
-  - [`packages/frontend/src/lib/offline.ts`](packages/frontend/src/lib/offline.ts:1) — IndexedDB helpers and pending-actions queue
-  - [`packages/frontend/static/service-worker.js`](packages/frontend/static/service-worker.js:1) — service worker implementing caching and background sync
-  - [`packages/frontend/src/services/memberAuthService.ts`](packages/frontend/src/services/memberAuthService.ts:1) — sign-in/out API calls and socket handlers
-  - UI components under [`packages/frontend/src/components/`]
-
-Running locally (recommended: Docker Compose)
-
-1. Copy environment file:
    - cp .env.example .env
-   - Edit `.env` and set Airtable / Google keys (or use test keys)
-2. Start development containers:
+   - Edit `.env` with your Airtable / Google keys (use a test Airtable base for development).
+
+2. Start development services:
+
    - docker-compose -f docker-compose.dev.yml up
-   - This mounts source into containers for live reloading.
 
-Run without Docker
+3. Open apps:
+   - Frontend: http://localhost:5174
+   - Backend API: http://localhost:3000
 
-- Backend:
+Quickstart (Local)
+
+- Backend
+
   - cd packages/backend
   - npm install
   - npm run dev
-  - Server listens on port 3000 by default (see configuration)
-- Frontend:
+  - Entry point: [`packages/backend/index.js`](packages/backend/index.js)
+
+- Frontend
   - cd packages/frontend
   - npm install
   - npm run dev
-  - Development server runs on port 5174 by default
+  - Svelte dev server: http://localhost:5174
 
-Backend details
+Environment variables
 
-- The backend centralizes calls to Airtable and protects API keys.
-- Route examples:
-  - POST /api/signIn — creates a Signed In record in Airtable (see [`packages/backend/routes/signIn.js`](packages/backend/routes/signIn.js:1))
-  - POST /api/signOut — creates a Use Log record, removes Signed In record, and may accept activities payload
-  - GET /api/members/allData — returns joined member data, kudos, messages, and active sign-ins (see [`packages/backend/services/membersService.js`](packages/backend/services/membersService.js:1))
-- Airtable helpers and table names are defined in [`packages/backend/services/airtableClient.js`](packages/backend/services/airtableClient.js:1).
-- Realtime: Socket.IO is initialized in the server entry and passed to routes via middleware so routes can emit events (e.g., signInUpdate, signOutUpdate).
+Create `.env` at repo root (see [`.env.example`](.env.example)). Minimum required variables:
 
-Frontend details
+- AIRTABLE_API_KEY
+- AIRTABLE_BASE_ID
+- GOOGLE_API_KEY (optional for calendar)
+- GOOGLE_CALENDAR_ID (optional for calendar)
 
-- Central store: [`packages/frontend/src/stores/appStore.ts`](packages/frontend/src/stores/appStore.ts:1)
-  - Responsible for fetching data from the backend, caching into IndexedDB, and exposing actions (memberActions, kudosActions, messageActions).
-  - Each fetch function implements cache-first or network-first logic with staleness checks using metadata in IndexedDB.
-- Offline layer: [`packages/frontend/src/lib/offline.ts`](packages/frontend/src/lib/offline.ts:1)
-  - Manages IndexedDB stores (members, kudos, messages, pendingActions, etc.)
-  - Exposes pendingActions.add/getAll/remove and offlineStorage.store/getAll/get
-  - Registers service worker and attempts background sync using SyncManager when adding pending actions.
-- Service Worker: [`packages/frontend/static/service-worker.js`](packages/frontend/static/service-worker.js:1)
-  - Caches static assets and API responses using a network-first strategy for APIs.
-  - Implements background sync handler `sync` event and a fallback message-based synchronization.
-  - When pending actions are synced successfully, it removes them from IndexedDB.
-- Socket handling: [`packages/frontend/src/services/memberAuthService.ts`](packages/frontend/src/services/memberAuthService.ts:1) subscribes to the socket and updates stores on signInUpdate and signOutUpdate events.
+Project layout (high level)
 
-Offline-first architecture (how it works)
+- packages/backend
 
-- When data is fetched, the frontend:
-  - Checks IndexedDB metadata for staleness (5 minute TTL by default).
-  - If cache is fresh and offline, it returns cached data.
-  - If online, it fetches from the server, stores the result in IndexedDB and updates metadata.
-- User actions while offline:
-  - Actions like signOut, message send, or kudos are queued as "pendingActions" in IndexedDB via [`packages/frontend/src/lib/offline.ts`](packages/frontend/src/lib/offline.ts:1).
-  - The service worker will attempt to sync queued actions when connectivity is restored (via background sync or when the client posts a message).
-  - UI is updated optimistically and rolled back if the sync ultimately fails.
-- Important stores: members, kudos, messages, pendingActions, systemAlerts, airtableAlerts.
+  - [`packages/backend/index.js`](packages/backend/index.js) — server bootstrap, Socket.IO init, route wiring
+  - [`packages/backend/routes/`] — Express routes (signIn, signOut, members, etc.)
+  - [`packages/backend/services/`] — Airtable and domain logic (membersService, kudosService, messagesService, etc.)
+  - [`packages/backend/services/airtableClient.js`](packages/backend/services/airtableClient.js) — Airtable base + table constants
 
-Airtable integration & safety
+- packages/frontend
+  - [`packages/frontend/src/stores/appStore.ts`](packages/frontend/src/stores/appStore.ts) — primary stores and sync functions
+  - [`packages/frontend/src/lib/offline.ts`](packages/frontend/src/lib/offline.ts) — IndexedDB helpers and pending actions queue
+  - [`packages/frontend/static/service-worker.js`](packages/frontend/static/service-worker.js) — caching + background sync
+  - [`packages/frontend/src/services/memberAuthService.ts`](packages/frontend/src/services/memberAuthService.ts) — auth calls + socket handlers
+  - UI under `packages/frontend/src/components/`
 
-- Airtable is the source of truth — schema is in [`docs/AIRTABLE_SCHEMA.md`](docs/AIRTABLE_SCHEMA.md:1).
-- Best practices:
-  - Use a non-production/test base for development and experimentation.
-  - Do not commit live API keys. Keep them in `.env` or secret manager.
-  - Understand that destructive operations (deletes) on Airtable will reflect in the live base.
+Backend — overview & routes
 
-Debugging tips
+- Responsibilities
 
-- Backend:
-  - Run local server (`npm run dev`) and use nodemon for autoreload.
-  - Add console logs in route handlers and service functions; errors are returned as JSON via global error middleware.
-- Frontend:
-  - Open the browser DevTools to inspect console logs from `appStore`, `offline.ts`, and the service worker.
-  - Check the Service Worker panel for registration status and background sync attempts.
-  - Inspect IndexedDB (Application -> IndexedDB) for stored data and pendingActions.
-  - Socket.IO diagnostics: watch connection state via [`packages/frontend/src/stores/connectionStore.ts`](packages/frontend/src/stores/connectionStore.ts:1).
-- Reproducing offline behavior:
-  - In DevTools: Network -> Offline mode or toggle "Offline" in connection settings.
-  - Create a signOut action while offline and inspect pendingActions store.
+  - Proxy Airtable access (protect keys)
+  - Provide aggregated endpoints for the frontend
+  - Emit realtime events via Socket.IO for UI updates
 
-Testing
+- Common routes (see `packages/backend/routes/`):
 
-- There are no automated unit/integration tests currently included.
-- Manual testing checklist:
-  - Sign-in flow: sign in a member, confirm `Signed In` row is created in Airtable and socket events are emitted.
-  - Sign-out flow: sign out with activities, confirm `Use Log` creation and `Signed In` record removal.
-  - Offline flow: perform sign-out while offline, confirm a pending action is created and eventually synced.
-  - Kudos and messages: create entries and confirm they appear in Airtable and in UI feeds.
-- If adding tests, prefer small units for services and a few end-to-end tests for the main happy paths.
+  - POST `/api/signIn` — create a Signed In record (see [`packages/backend/routes/signIn.js`](packages/backend/routes/signIn.js))
+  - POST `/api/signOut` — create a Use Log and remove Signed In record
+  - GET `/api/members/allData` — aggregated member data (members + messages + kudos + signed-in state)
+  - GET `/api/members/signedInMembers` — list currently signed-in members
+  - GET/POST `/api/kudos` — list & create kudos
+  - GET/POST `/api/messages` — list & create messages
+  - GET `/api/activities`, `/api/alerts`, `/api/mentors`, `/api/calendar/events`, etc.
 
-Code style & conventions
+- Helpful backend files:
+  - [`packages/backend/services/membersService.js`](packages/backend/services/membersService.js)
+  - [`packages/backend/services/kudosService.js`](packages/backend/services/kudosService.js)
+  - [`packages/backend/services/messagesService.js`](packages/backend/services/messagesService.js)
 
-- Backend: CommonJS modules are used (require/module.exports). Keep consistent style when editing backend files.
-- Frontend: TypeScript with SvelteKit; use strict typing where appropriate.
-- Keep console.log statements helpful; many logs are intentionally present to aid debugging in kiosk deployments.
+Frontend — stores, offline & sync
 
-Deployment
+- Centralized stores:
 
-- Docker Compose (production):
-  - docker-compose up --build
-- Recommended production considerations:
-  - Serve frontend as static files or behind a CDN.
-  - Secure environment variables via a vault or CI secrets.
-  - Use separate Airtable bases for staging and production.
-  - Health checks and monitoring for Socket.IO and background sync.
+  - [`packages/frontend/src/stores/appStore.ts`](packages/frontend/src/stores/appStore.ts)
+  - Exposes fetchers (fetchAllMembers, fetchKudos, fetchMessages, etc.), actions (memberActions, kudosActions, messageActions), and syncStores()
 
-Where to go from here
+- Offline utilities:
 
-- For architecture and user flows: see [`docs/README.md`](docs/README.md:1)
-- For Airtable schema: see [`docs/AIRTABLE_SCHEMA.md`](docs/AIRTABLE_SCHEMA.md:1)
-- For API reference (planned): see [`docs/API.md`](docs/API.md:1) — will contain routes and payload examples.
+  - [`packages/frontend/src/lib/offline.ts`](packages/frontend/src/lib/offline.ts)
+  - Manages IndexedDB stores: members, kudos, messages, pendingActions, metadata, etc.
+  - Exposes `offlineStorage` (store/get/getAll/delete/clear) and `pendingActions` (add/getAll/remove)
+
+- Connection and sync state:
+  - [`packages/frontend/src/stores/connectionStore.ts`](packages/frontend/src/stores/connectionStore.ts)
+  - Tracks isOnline, isSyncing, pendingActionsCount and exposes a `connectionStatus` derived store
+
+Offline-first flow (how it works)
+
+1. Data fetching
+
+   - Each fetch function checks:
+     - If offline OR cached data is fresh (metadata/staleness), return cached data
+     - Otherwise, fetch from API, store results in IndexedDB and update metadata
+   - Cache TTL is implemented in [`packages/frontend/src/lib/offline.ts`](packages/frontend/src/lib/offline.ts)
+
+2. Pending actions (user writes while offline)
+   - Actions (signOut, kudos, message) are saved in `pendingActions` with a client-generated id and timestamp
+   - The UI is updated optimistically
+   - The service worker or background sync processes pending actions when connectivity is restored
+   - Actions map to API endpoints:
+     - signIn -> POST `/api/signIn`
+     - signOut -> POST `/api/signOut`
+     - kudos -> POST `/api/kudos`
+     - message -> POST `/api/messages`
+
+Service worker & background sync
+
+- File: [`packages/frontend/static/service-worker.js`](packages/frontend/static/service-worker.js)
+- Strategy:
+  - Network-first for `/api/` requests (fall back to cache on failure)
+  - Cache-first for static assets
+  - Background sync:
+    - Uses `sync` event with tag `sync-pending-actions` when available
+    - Fallback: listens for client `message` events with type `SYNC_PENDING_ACTIONS`
+  - Sync procedure:
+    - Open IndexedDB (pendingActions)
+    - Iterate pending actions, POST to corresponding endpoints, remove successful actions
+
+Realtime (Socket.IO) events
+
+- Socket initialized at server entry: [`packages/backend/index.js`](packages/backend/index.js)
+- Routes can emit events via `req.io`
+- Frontend subscribes in [`packages/frontend/src/services/memberAuthService.ts`](packages/frontend/src/services/memberAuthService.ts)
+
+Notable events:
+
+- `signInUpdate` — payload: updated member object (includes `signInRecordId`, `signInTime`, `currentMemberType`, etc.)
+- `signOutUpdate` — payload: { signInRecordId, memberId }
+- Additional events may be emitted for kudos/messages/alerts where appropriate (check route implementations)
+
+Debugging & troubleshooting
+
+- Backend
+
+  - Run: cd packages/backend && npm run dev
+  - Logs are printed to console; global error middleware returns JSON for errors
+  - Helpful places to add logs: route handlers and service functions in `packages/backend/services/`
+
+- Frontend
+
+  - Run: cd packages/frontend && npm run dev
+  - Use browser DevTools:
+    - Console: `console.log` traces in `appStore`, `offline.ts`, and the service worker
+    - Application -> IndexedDB: inspect stores and pending actions
+    - Service Worker panel: check registration, lifecycle, and messages
+  - Reproduce offline:
+    - DevTools -> Network -> Offline
+    - Trigger a signOut to create a pending action and verify it's in IndexedDB
+
+- Socket.IO diagnostics
+  - Watch connection state in [`packages/frontend/src/stores/connectionStore.ts`](packages/frontend/src/stores/connectionStore.ts)
+  - Server logs "New client connected" when sockets connect
+
+Testing checklist
+
+- Sign-in flow
+
+  - Sign in a member, ensure `/api/signIn` returns success and server emits `signInUpdate`
+  - Verify Signed In record in Airtable
+
+- Sign-out flow
+
+  - Sign out with activity details; verify Use Log created and Signed In record removed; server emits `signOutUpdate`
+
+- Offline flow
+
+  - Go offline and perform sign-out or kudos
+  - Confirm a `pendingActions` entry is created in IndexedDB
+  - Return online / simulate sync; ensure pending action is processed and removed
+
+- Kudos & messages
+  - Create kudos/messages and verify they appear in UI and Airtable
+
+Deployment notes
+
+- Docker Compose:
+
+  - Production build: docker-compose up --build
+  - Ensure environment variables are provided securely in production (CI secrets, vault)
+
+- Recommendations:
+  - Use separate Airtable bases for staging/production
+  - Consider idempotency/dedup keys for server processing of pending actions
+  - Monitor Socket.IO throughput and health for multi-kiosk deployments
+
+Contributing & next steps
+
+- Add `CONTRIBUTING.md` if you want a formal contribution process
+- Add tests (unit + e2e) for core flows
+- Expand API docs in [`docs/API.md`](docs/API.md) with more sample requests/responses
+- Complete the Airtable schema doc: [`docs/AIRTABLE_SCHEMA.md`](docs/AIRTABLE_SCHEMA.md)
+
+References
+
+- Project docs: [`docs/README.md`](docs/README.md)
+- Airtable schema: [`docs/AIRTABLE_SCHEMA.md`](docs/AIRTABLE_SCHEMA.md)
+- Backend entry: [`packages/backend/index.js`](packages/backend/index.js)
+- Frontend offline utilities: [`packages/frontend/src/lib/offline.ts`](packages/frontend/src/lib/offline.ts)
