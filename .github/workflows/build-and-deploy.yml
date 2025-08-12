@@ -109,6 +109,9 @@ jobs:
             echo "Logging into GitHub Container Registry..."
             echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
+            echo "Setting image tag to: live"
+            export IMAGE_TAG=live
+
             echo "Stopping existing containers..."
             docker-compose -f docker-compose.prod.yml down
 
@@ -118,17 +121,17 @@ jobs:
             docker image rm "ghcr.io/$GITHUB_REPOSITORY-frontend:latest" 2>/dev/null || true
             docker image rm "ghcr.io/$GITHUB_REPOSITORY-backend:latest" 2>/dev/null || true
 
-            echo "Pulling latest Docker images..."
-            docker-compose -f docker-compose.prod.yml pull
+            echo "Pulling latest Docker images with tag: $IMAGE_TAG..."
+            IMAGE_TAG=live docker-compose -f docker-compose.prod.yml pull
 
             echo "Starting services with fresh images..."
-            docker-compose -f docker-compose.prod.yml up -d
+            IMAGE_TAG=live docker-compose -f docker-compose.prod.yml up -d
 
             echo "Waiting for services to be ready..."
             sleep 15
 
             echo "Verifying deployment..."
-            docker-compose -f docker-compose.prod.yml ps
+            IMAGE_TAG=live docker-compose -f docker-compose.prod.yml ps
 
             echo "Cleaning up unused Docker resources..."
             docker system prune -f
