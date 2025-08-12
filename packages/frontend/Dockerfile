@@ -30,5 +30,5 @@ COPY --from=build /app/node_modules ./node_modules
 # Expose the port
 EXPOSE 5174
 
-# Use the SvelteKit preview server with config from vite.config.ts
-CMD ["npm", "run", "preview"]
+# Use the SvelteKit preview server with explicit host and port
+CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "5174"]
