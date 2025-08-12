@@ -39,6 +39,7 @@ jobs:
             type=ref,event=pr
             type=sha,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=live,enable=${{ github.ref == 'refs/heads/live' }}
 
       - name: Build and push Frontend Docker image
         uses: docker/build-push-action@v5
@@ -76,6 +77,7 @@ jobs:
             type=ref,event=pr
             type=sha,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=live,enable=${{ github.ref == 'refs/heads/live' }}
 
       - name: Build and push Backend Docker image
         uses: docker/build-push-action@v5
