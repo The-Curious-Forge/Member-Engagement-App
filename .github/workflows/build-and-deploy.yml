@@ -194,8 +194,17 @@ jobs:
             echo "Stopping current services..."
             docker-compose -f docker-compose.prod.yml down
 
-            echo "Starting services with updated images..."
-            docker-compose -f docker-compose.prod.yml up -d
+            echo "Removing any orphaned containers..."
+            docker-compose -f docker-compose.prod.yml down --remove-orphans
+
+            echo "Starting services with updated images (forcing recreation)..."
+            docker-compose -f docker-compose.prod.yml up -d --force-recreate --remove-orphans
+
+            echo "Verifying new containers are running..."
+            docker-compose -f docker-compose.prod.yml ps
+
+            echo "Checking frontend container details..."
+            docker inspect member-engagement-frontend | grep -A 5 '"Image"'
 
             echo "Waiting for services to be ready..."
             sleep 15
