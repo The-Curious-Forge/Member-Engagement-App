@@ -28,7 +28,7 @@ COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/node_modules ./node_modules
 
 # Expose the port
-EXPOSE 5174
+EXPOSE 4173
 
 # Use the SvelteKit preview server with configuration from vite.config.ts
 CMD ["npm", "run", "preview"]
