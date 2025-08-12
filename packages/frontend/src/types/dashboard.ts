@@ -23,6 +23,8 @@ export interface ModuleConfig {
 		y: number;
 	};
 	helpContent?: string; // Help text to display in overlay
+	isInMaintenance?: boolean; // Whether module is in maintenance mode
+	maintenanceMessage?: string; // Custom message to show during maintenance
 	styles?: {
 		background?: string; // Custom background color/gradient
 		headerBackground?: string; // Custom header background

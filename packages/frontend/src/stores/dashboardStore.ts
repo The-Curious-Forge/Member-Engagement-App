@@ -7,6 +7,13 @@ import type {
 } from '../types/dashboard';
 import { ModuleID, DashboardView } from '../types/dashboard';
 
+// Maintenance mode and help text settings store
+interface SettingsStore {
+	maintenanceStates: Partial<Record<ModuleID, boolean>>;
+	customHelpTexts: Partial<Record<ModuleID, string>>;
+	customMaintenanceMessages: Partial<Record<ModuleID, string>>;
+}
+
 // Default module configurations
 const defaultModuleConfigs: Record<ModuleID, ModuleConfig> = {
 	// Main Dashboard Modules
@@ -135,6 +142,47 @@ const defaultModuleConfigs: Record<ModuleID, ModuleConfig> = {
 			'Get help and learn how to use The Forge dashboard. Click the question mark icon to see help for each module.'
 	}
 };
+
+// Load settings from localStorage with SSR support
+function loadSettings(): SettingsStore {
+	if (typeof window === 'undefined') {
+		return {
+			maintenanceStates: {},
+			customHelpTexts: {},
+			customMaintenanceMessages: {}
+		};
+	}
+
+	try {
+		const saved = window.localStorage.getItem('dashboardSettings');
+		if (!saved) {
+			return {
+				maintenanceStates: {},
+				customHelpTexts: {},
+				customMaintenanceMessages: {}
+			};
+		}
+		return JSON.parse(saved);
+	} catch (error) {
+		console.error('Error loading dashboard settings:', error);
+		return {
+			maintenanceStates: {},
+			customHelpTexts: {},
+			customMaintenanceMessages: {}
+		};
+	}
+}
+
+// Save settings to localStorage with SSR support
+function saveSettings(settings: SettingsStore): void {
+	if (typeof window === 'undefined') return;
+
+	try {
+		window.localStorage.setItem('dashboardSettings', JSON.stringify(settings));
+	} catch (error) {
+		console.error('Error saving dashboard settings:', error);
+	}
+}
 
 // Load saved layout from localStorage with SSR support
 function loadSavedLayout(view: DashboardView): DashboardLayout | null {
@@ -417,6 +465,59 @@ function createDashboardStore() {
 
 const store = createDashboardStore();
 
+// Create settings store
+function createSettingsStore() {
+	const initialSettings = loadSettings();
+	const { subscribe, update } = writable<SettingsStore>(initialSettings);
+
+	// Save settings whenever they change
+	subscribe((settings) => {
+		saveSettings(settings);
+	});
+
+	return {
+		subscribe,
+
+		toggleMaintenanceMode: (moduleId: ModuleID) =>
+			update((settings) => ({
+				...settings,
+				maintenanceStates: {
+					...settings.maintenanceStates,
+					[moduleId]: !settings.maintenanceStates[moduleId]
+				}
+			})),
+
+		updateHelpText: (moduleId: ModuleID, helpText: string) =>
+			update((settings) => ({
+				...settings,
+				customHelpTexts: {
+					...settings.customHelpTexts,
+					[moduleId]: helpText
+				}
+			})),
+
+		updateMaintenanceMessage: (moduleId: ModuleID, message: string) =>
+			update((settings) => ({
+				...settings,
+				customMaintenanceMessages: {
+					...settings.customMaintenanceMessages,
+					[moduleId]: message
+				}
+			})),
+
+		resetModuleSettings: (moduleId: ModuleID) =>
+			update((settings) => {
+				const newSettings = { ...settings };
+				delete newSettings.maintenanceStates[moduleId];
+				delete newSettings.customHelpTexts[moduleId];
+				delete newSettings.customMaintenanceMessages[moduleId];
+				return newSettings;
+			})
+	};
+}
+
+const settingsStore = createSettingsStore();
+
 // Create the stores with proper typing
 export const dashboardStore = {
 	subscribe: store.subscribe,
@@ -430,5 +531,29 @@ export const dashboardStore = {
 	switchToMemberDashboard: store.switchToMemberDashboard
 };
 
-// Derived store for module configurations
-export const moduleConfigs = derived(store, () => defaultModuleConfigs);
+// Export settings store
+export const dashboardSettings = {
+	subscribe: settingsStore.subscribe,
+	toggleMaintenanceMode: settingsStore.toggleMaintenanceMode,
+	updateHelpText: settingsStore.updateHelpText,
+	updateMaintenanceMessage: settingsStore.updateMaintenanceMessage,
+	resetModuleSettings: settingsStore.resetModuleSettings
+};
+
+// Derived store for module configurations with maintenance mode and custom help text
+export const moduleConfigs = derived([store, settingsStore], ([, settings]) => {
+	const configs = {} as Record<ModuleID, ModuleConfig>;
+
+	for (const id in defaultModuleConfigs) {
+		const moduleId = id as ModuleID;
+		const config = defaultModuleConfigs[moduleId];
+		configs[moduleId] = {
+			...config,
+			isInMaintenance: settings.maintenanceStates[moduleId] || false,
+			maintenanceMessage: settings.customMaintenanceMessages[moduleId] || 'Coming Soon',
+			helpContent: settings.customHelpTexts[moduleId] || config.helpContent
+		};
+	}
+
+	return configs;
+});

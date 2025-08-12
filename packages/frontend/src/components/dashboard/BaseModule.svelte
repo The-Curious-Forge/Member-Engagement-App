@@ -12,6 +12,9 @@
     let moduleElement: HTMLElement | null = null;
     let originalRect: DOMRect | null = null;
 
+    // Prevent interaction when in maintenance mode
+    $: isInteractionDisabled = config.isInMaintenance && !isEditMode;
+
     // Store the module's original position when expanding
     function updateOriginalRect() {
         if (moduleElement) {
@@ -20,22 +23,22 @@
     }
 
     function handleMoveStart(event: MouseEvent) {
-        if (!isEditMode) return;
+        if (!isEditMode || isInteractionDisabled) return;
         event.preventDefault();
         event.stopPropagation();
         dispatch('move', { moduleId: config.id, event });
     }
     
     function handleResize(event: MouseEvent) {
-        if (!isEditMode) return;
+        if (!isEditMode || isInteractionDisabled) return;
         event.preventDefault();
         event.stopPropagation();
         dispatch('resize', { moduleId: config.id, event });
     }
     
     function handleToggleExpand(event: MouseEvent) {
-        // Don't expand if in edit mode or module isn't expandable
-        if (isEditMode || !config.isExpandable) return;
+        // Don't expand if in edit mode, module isn't expandable, or in maintenance mode
+        if (isEditMode || !config.isExpandable || isInteractionDisabled) return;
         
         // If it's a button click, stop propagation to prevent double-triggering
         const isButtonClick = (event.target as HTMLElement).closest('.control-button');
@@ -90,7 +93,8 @@
         'module',
         isEditMode && 'edit-mode',
         isExpanded && 'expanded',
-        config.isExpandable && 'expandable'
+        config.isExpandable && 'expandable',
+        config.isInMaintenance && 'maintenance-mode'
     ].filter(Boolean).join(' ');
 </script>
 
@@ -127,7 +131,7 @@
                     ← Back
                 </button>
             {/if}
-            {#if !isEditMode && config.isExpandable}
+            {#if !isEditMode && config.isExpandable && !config.isInMaintenance}
                 <button
                     class="control-button expand-toggle"
                     on:click={handleToggleExpand}
@@ -139,15 +143,25 @@
         </div>
     </div>
     
-    <div class="module-content" class:edit-mode={isEditMode}>
+    <div class="module-content" class:edit-mode={isEditMode} class:maintenance={config.isInMaintenance}>
         <div class="scroll-container">
             <div class="content-wrapper">
                 <slot />
             </div>
         </div>
+        
+        {#if config.isInMaintenance}
+            <div class="maintenance-overlay">
+                <div class="maintenance-content">
+                    <div class="maintenance-icon">🔧</div>
+                    <h3 class="maintenance-title">{config.maintenanceMessage || 'Coming Soon'}</h3>
+                    <p class="maintenance-description">This module is currently under maintenance</p>
+                </div>
+            </div>
+        {/if}
     </div>
 
-    {#if isEditMode}
+    {#if isEditMode && !config.isInMaintenance}
         <div
             class="resize-handle"
             on:mousedown={handleResize}
@@ -172,6 +186,17 @@
         align-self: stretch;
         justify-self: stretch;
         transition: all 0.2s ease;
+    }
+
+    .module.maintenance-mode {
+        background: #f8f9fa;
+        opacity: 0.7;
+        filter: grayscale(30%);
+    }
+
+    .module.maintenance-mode .module-header {
+        background: #e9ecef;
+        color: #6c757d;
     }
 
     /* Header hover effects for expandable modules */
@@ -376,6 +401,52 @@
         height: 100%;
         display: flex;
         flex-direction: column;
+    }
+
+    .module-content.maintenance {
+        pointer-events: none;
+    }
+
+    .maintenance-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(248, 249, 250, 0.95);
+        backdrop-filter: blur(2px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+        border-radius: 0 0 12px 12px;
+    }
+
+    .maintenance-content {
+        text-align: center;
+        padding: 2rem;
+        max-width: 200px;
+    }
+
+    .maintenance-icon {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        opacity: 0.7;
+    }
+
+    .maintenance-title {
+        margin: 0 0 0.5rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #495057;
+        line-height: 1.3;
+    }
+
+    .maintenance-description {
+        margin: 0;
+        font-size: 0.875rem;
+        color: #6c757d;
+        line-height: 1.4;
     }
 
     .scroll-container {
