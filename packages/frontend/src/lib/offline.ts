@@ -19,6 +19,7 @@ interface SyncManager {
 
 interface SignInData {
 	memberId: string;
+	memberTypeId: string;
 	timestamp: Date;
 }
 
@@ -36,8 +37,8 @@ interface SignOutData {
 }
 
 interface KudosData {
-	from: Array<{ id: string; name: string }>;
-	to: Array<{ id: string; name: string }>;
+	from?: string;
+	to: string[];
 	message: string;
 }
 
@@ -273,6 +274,9 @@ export const offlineStorage = {
 	}
 };
 
+// Track if we've already set up the fallback sync mechanism
+let fallbackSyncInitialized = false;
+
 // Pending actions management
 export const pendingActions = {
 	async add(action: Omit<PendingAction, 'id' | 'timestamp'>) {
@@ -290,11 +294,19 @@ export const pendingActions = {
 
 			if (syncManager) {
 				await syncManager.register('sync-pending-actions');
-			} else {
-				// Fallback for browsers that don't support background sync
+			} else if (!fallbackSyncInitialized) {
+				// Only set up fallback once if background sync is not supported
+				console.log('[Offline] Background sync not supported, setting up fallback mechanism');
+				fallbackSyncInitialized = true;
+
 				const handleOnline = async () => {
 					const pendingActions = await offlineStorage.getAll(STORES.pendingActions);
 					if (pendingActions.length > 0) {
+						console.log(
+							'[Offline] Fallback sync triggered, found',
+							pendingActions.length,
+							'pending actions'
+						);
 						// Send message to service worker to sync
 						registration.active?.postMessage({
 							type: 'SYNC_PENDING_ACTIONS'
@@ -328,5 +340,22 @@ export const pendingActions = {
 		return offlineStorage.clear(STORES.pendingActions);
 	}
 };
+
+// Global function to clear pending actions (for debugging)
+if (browser) {
+	(window as any).clearPendingActions = async () => {
+		try {
+			await pendingActions.clear();
+			console.log('✅ All pending actions cleared successfully');
+			// Update the count
+			const allPending = await pendingActions.getAll();
+			import('../stores/connectionStore').then(({ pendingActionsCount }) => {
+				pendingActionsCount.set(allPending.length);
+			});
+		} catch (error) {
+			console.error('❌ Failed to clear pending actions:', error);
+		}
+	};
+}
 
 export type { PendingAction, SignInData, SignOutData, KudosData, MessageData, StoreMetadata };

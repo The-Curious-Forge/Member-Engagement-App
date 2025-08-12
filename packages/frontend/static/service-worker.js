@@ -1,14 +1,23 @@
 // Service Worker for The Curious Forge Member Engagement App
-const CACHE_NAME = 'curious-forge-cache-v1';
+const CACHE_NAME = 'curious-forge-cache-v2';
 const OFFLINE_URL = '/';
 
 // Allow service worker to work in development mode
 self.addEventListener('install', (event) => {
 	console.log('Service Worker installing...');
 	event.waitUntil(
-		caches.open(CACHE_NAME).then((cache) => {
-			return cache.addAll([OFFLINE_URL, '/favicon.png', '/default_profile.jpg']);
-		})
+		caches
+			.open(CACHE_NAME)
+			.then((cache) => {
+				// Only cache essential files that actually exist
+				return cache.addAll([OFFLINE_URL]).catch((error) => {
+					console.warn('Failed to cache some resources:', error);
+					// Continue installation even if caching fails
+				});
+			})
+			.catch((error) => {
+				console.warn('Cache initialization failed:', error);
+			})
 	);
 });
 
@@ -25,17 +34,23 @@ self.addEventListener('activate', (event) => {
 
 // Handle background sync
 self.addEventListener('sync', (event) => {
+	console.log('[Service Worker] Sync event received with tag:', event.tag);
 	if (event.tag === 'sync-pending-actions') {
-		console.log('Background sync triggered');
+		console.log('[Service Worker] Background sync triggered for pending actions');
 		event.waitUntil(syncPendingActions());
+	} else {
+		console.log('[Service Worker] Unknown sync tag:', event.tag);
 	}
 });
 
 // Handle messages from clients
 self.addEventListener('message', (event) => {
+	console.log('[Service Worker] Message received from client:', event.data);
 	if (event.data && event.data.type === 'SYNC_PENDING_ACTIONS') {
-		console.log('Sync message received from client');
+		console.log('[Service Worker] Sync message received from client, starting sync...');
 		event.waitUntil(syncPendingActions());
+	} else {
+		console.log('[Service Worker] Unknown message type:', event.data?.type);
 	}
 });
 
@@ -94,31 +109,129 @@ self.addEventListener('fetch', (event) => {
 	);
 });
 
+// Sync lock to prevent concurrent processing
+let isSyncing = false;
+let syncPromise = null;
+
 // Function to sync pending actions with the server
 async function syncPendingActions() {
 	try {
+		// Check if sync is already in progress
+		if (isSyncing) {
+			console.log('[Service Worker] Sync already in progress, waiting for completion...');
+			if (syncPromise) {
+				await syncPromise;
+			}
+			return;
+		}
+
+		// Create a promise for this sync operation
+		syncPromise = doSync();
+		return await syncPromise;
+	} catch (error) {
+		console.error('Error in syncPendingActions:', error);
+		throw error;
+	} finally {
+		syncPromise = null;
+	}
+}
+
+async function doSync() {
+	try {
+		isSyncing = true;
+		console.log('[Service Worker] syncPendingActions() called');
+
+		// Notify client that sync is starting
+		self.clients.matchAll().then((clients) => {
+			console.log('[Service Worker] Notifying', clients.length, 'clients that sync is starting');
+			clients.forEach((client) => {
+				client.postMessage({ type: 'SYNC_START' });
+			});
+		});
+
 		// Open IndexedDB
+		console.log('[Service Worker] Opening IndexedDB...');
 		const db = await openDatabase();
-		const pendingActions = await getAllPendingActions(db);
+		console.log('[Service Worker] Database opened successfully');
+
+		// Atomically get and remove all pending actions to prevent duplicate processing
+		const pendingActions = await getAndRemoveAllPendingActions(db);
+		console.log('[Service Worker] Retrieved and removed pending actions:', pendingActions);
 
 		if (pendingActions.length === 0) {
 			console.log('No pending actions to sync');
+			// Still notify success even if no actions to sync
+			self.clients.matchAll().then((clients) => {
+				clients.forEach((client) => {
+					client.postMessage({ type: 'SYNC_SUCCESS', actionsProcessed: 0 });
+				});
+			});
 			return;
 		}
 
 		console.log(`Syncing ${pendingActions.length} pending actions`);
 
+		let successCount = 0;
+		let failureCount = 0;
+		const failedActions = [];
+
 		// Process each pending action
 		for (const action of pendingActions) {
 			try {
+				console.log(`[Service Worker] About to process action:`, action);
 				await processAction(action);
-				await removePendingAction(db, action.id);
+				successCount++;
+				console.log(`Successfully processed ${action.type} action ${action.id}`);
 			} catch (error) {
 				console.error(`Failed to process action ${action.id}:`, error);
+				console.error(`[Service Worker] Action that failed:`, action);
+				failureCount++;
+
+				// Increment retry count
+				action.retryCount = (action.retryCount || 0) + 1;
+
+				// Only re-add if under max retries
+				if (action.retryCount < 3) {
+					failedActions.push(action);
+				} else {
+					console.warn(`Discarding action ${action.id} after ${action.retryCount} failed attempts`);
+				}
 			}
 		}
+
+		// Re-add failed actions that are under the retry limit
+		if (failedActions.length > 0) {
+			console.log(`Re-adding ${failedActions.length} failed actions for retry`);
+			await addPendingActionsBack(db, failedActions);
+		}
+
+		console.log(`Sync completed: ${successCount} successful, ${failureCount} failed`);
+
+		// Notify client that sync is complete
+		self.clients.matchAll().then((clients) => {
+			clients.forEach((client) => {
+				client.postMessage({
+					type: 'SYNC_SUCCESS',
+					actionsProcessed: successCount,
+					failures: failureCount
+				});
+			});
+		});
 	} catch (error) {
 		console.error('Error syncing pending actions:', error);
+		// Notify client of sync failure
+		self.clients.matchAll().then((clients) => {
+			clients.forEach((client) => {
+				client.postMessage({
+					type: 'SYNC_ERROR',
+					error: error.message
+				});
+			});
+		});
+	} finally {
+		// Always release the sync lock
+		isSyncing = false;
+		console.log('[Service Worker] Sync lock released');
 	}
 }
 
@@ -139,7 +252,73 @@ function openDatabase() {
 	});
 }
 
-// Helper function to get all pending actions
+// Helper function to atomically get and remove all pending actions
+function getAndRemoveAllPendingActions(db) {
+	return new Promise((resolve, reject) => {
+		const transaction = db.transaction('pendingActions', 'readwrite');
+		const store = transaction.objectStore('pendingActions');
+
+		// First get all actions
+		const getAllRequest = store.getAll();
+
+		getAllRequest.onsuccess = () => {
+			const actions = getAllRequest.result;
+
+			if (actions.length === 0) {
+				resolve([]);
+				return;
+			}
+
+			// Then clear the store in the same transaction
+			const clearRequest = store.clear();
+
+			clearRequest.onsuccess = () => {
+				console.log(`[Service Worker] Atomically retrieved and removed ${actions.length} actions`);
+				resolve(actions);
+			};
+
+			clearRequest.onerror = () => reject(clearRequest.error);
+		};
+
+		getAllRequest.onerror = () => reject(getAllRequest.error);
+	});
+}
+
+// Helper function to add failed actions back for retry
+function addPendingActionsBack(db, actions) {
+	return new Promise((resolve, reject) => {
+		const transaction = db.transaction('pendingActions', 'readwrite');
+		const store = transaction.objectStore('pendingActions');
+
+		let completed = 0;
+		let failed = false;
+
+		if (actions.length === 0) {
+			resolve();
+			return;
+		}
+
+		actions.forEach((action) => {
+			const request = store.put(action);
+
+			request.onsuccess = () => {
+				completed++;
+				if (completed === actions.length && !failed) {
+					resolve();
+				}
+			};
+
+			request.onerror = () => {
+				if (!failed) {
+					failed = true;
+					reject(request.error);
+				}
+			};
+		});
+	});
+}
+
+// Helper function to get all pending actions (kept for compatibility)
 function getAllPendingActions(db) {
 	return new Promise((resolve, reject) => {
 		const transaction = db.transaction('pendingActions', 'readonly');
@@ -151,12 +330,24 @@ function getAllPendingActions(db) {
 	});
 }
 
-// Helper function to remove a pending action
+// Helper function to remove a pending action (kept for compatibility)
 function removePendingAction(db, id) {
 	return new Promise((resolve, reject) => {
 		const transaction = db.transaction('pendingActions', 'readwrite');
 		const store = transaction.objectStore('pendingActions');
 		const request = store.delete(id);
+
+		request.onsuccess = () => resolve();
+		request.onerror = () => reject(request.error);
+	});
+}
+
+// Helper function to update a pending action (kept for compatibility)
+function updatePendingAction(db, action) {
+	return new Promise((resolve, reject) => {
+		const transaction = db.transaction('pendingActions', 'readwrite');
+		const store = transaction.objectStore('pendingActions');
+		const request = store.put(action);
 
 		request.onsuccess = () => resolve();
 		request.onerror = () => reject(request.error);
@@ -169,10 +360,15 @@ async function processAction(action) {
 	let method = 'POST';
 	let body;
 
+	console.log('[Service Worker] Processing action:', action.type, 'with data:', action.data);
+
 	switch (action.type) {
 		case 'signIn':
 			endpoint = '/api/signIn';
-			body = { memberId: action.data.memberId };
+			body = {
+				memberId: action.data.memberId,
+				memberTypeId: action.data.memberTypeId
+			};
 			break;
 		case 'signOut':
 			endpoint = '/api/signOut';
@@ -190,6 +386,8 @@ async function processAction(action) {
 			throw new Error(`Unknown action type: ${action.type}`);
 	}
 
+	console.log('[Service Worker] Making API call to:', endpoint, 'with body:', body);
+
 	const response = await fetch(endpoint, {
 		method,
 		headers: {
@@ -198,7 +396,11 @@ async function processAction(action) {
 		body: JSON.stringify(body)
 	});
 
+	console.log('[Service Worker] API response status:', response.status, response.statusText);
+
 	if (!response.ok) {
+		const errorText = await response.text();
+		console.error('[Service Worker] API error response:', errorText);
 		throw new Error(`Failed to process ${action.type} action: ${response.statusText}`);
 	}
 

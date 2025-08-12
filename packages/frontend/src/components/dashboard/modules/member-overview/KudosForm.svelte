@@ -2,7 +2,8 @@
     import { members, kudosActions, systemAlertActions } from '../../../../stores/appStore';
     import type { Member } from '../../../../stores/appStore';
     import { socket } from '../../../../stores/socket';
-    import { offlineStorage, pendingActions } from '../../../../lib/offline';
+    import { pendingActions, type PendingAction } from '../../../../lib/offline';
+    import { pendingActionsCount } from '../../../../stores/connectionStore';
 
     export let member: Member;
 
@@ -24,25 +25,22 @@
     async function handleKudosSubmit() {
         if (!kudosMessage.trim() || selectedRecipients.length === 0) return;
 
-        try {
-            const kudosData = {
-                from: [{ id: member.id, name: member.name }],
-                to: selectedRecipients.map(r => ({ id: r.id, name: r.name })),
-                message: kudosMessage.trim()
-            };
+        const apiData = {
+            from: member.id,
+            to: selectedRecipients.map(r => r.id),
+            message: kudosMessage.trim()
+        };
 
-            if (isOnline) {
+        try {
+            if (navigator.onLine) {
+                // Try to send directly to API when online
                 try {
                     const response = await fetch('/api/kudos', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
                         },
-                        body: JSON.stringify({
-                            from: member.id,
-                            to: selectedRecipients.map(r => r.id),
-                            message: kudosMessage.trim()
-                        })
+                        body: JSON.stringify(apiData)
                     });
 
                     if (!response.ok) {
@@ -53,28 +51,41 @@
                     selectedRecipients = [];
                     systemAlertActions.add('success', 'Kudos sent successfully!');
                 } catch (error) {
-                    throw new Error('Failed to send kudos to server');
+                    console.error('Online kudos failed, queueing for offline sync:', error);
+                    // If online request fails, queue for offline sync
+                    throw error;
                 }
             } else {
-                await pendingActions.add({
-                    type: 'kudos',
-                    data: kudosData
-                });
+                throw new Error('Offline');
+            }
+        } catch (error) {
+            // Queue for offline processing (whether offline or online request failed)
+            try {
+                const action: Omit<PendingAction, 'id' | 'timestamp'> = {
+                    type: 'kudos' as const,
+                    data: apiData
+                };
+
+                await pendingActions.add(action);
                 
-                await offlineStorage.store('kudos', {
-                    ...kudosData,
-                    id: crypto.randomUUID(),
-                    date: new Date().toISOString()
+                // Update UI optimistically with the full kudos object for display
+                await kudosActions.add({
+                    from: [{ id: member.id, name: member.name }],
+                    to: selectedRecipients.map(r => ({ id: r.id, name: r.name })),
+                    message: kudosMessage.trim()
                 });
+
+                // Update pending actions count
+                const allPending = await pendingActions.getAll();
+                pendingActionsCount.set(allPending.length);
 
                 kudosMessage = '';
                 selectedRecipients = [];
-                systemAlertActions.add('success', 'Kudos queued for sending when online');
+                systemAlertActions.add('info', 'Kudos will be sent when connection is restored.');
+            } catch (offlineError) {
+                console.error('Failed to queue kudos:', offlineError);
+                systemAlertActions.add('error', 'Failed to send kudos. Please try again.');
             }
-            
-        } catch (error) {
-            console.error('Kudos error:', error);
-            systemAlertActions.add('error', 'Failed to send kudos. Please try again.');
         }
     }
 </script>
