@@ -19,16 +19,18 @@ FROM node:18-alpine as production
 
 WORKDIR /app
 
-# Install serve globally for serving static files
-RUN npm install -g serve
-
-# Copy built assets from build stage
-COPY --from=build /app/.svelte-kit /app/.svelte-kit
+# Copy built application from build stage
+COPY --from=build /app/build ./build
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/node_modules ./node_modules
 
 # Expose the port
-EXPOSE 4173
+EXPOSE 3000
 
-# Use the SvelteKit preview server with configuration from vite.config.ts
-CMD ["npm", "run", "preview"]
+# Set environment variables for SvelteKit Node server
+ENV HOST=0.0.0.0
+ENV PORT=3000
+ENV ORIGIN=https://signin.thecuriousforge.org
+
+# Start the SvelteKit Node.js server
+CMD ["node", "build"]
