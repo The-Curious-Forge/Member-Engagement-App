@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   traefik:
     image: traefik:v3.0
@@ -40,6 +38,9 @@ services:
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
 
   backend:
+    build:
+      context: ./packages/backend
+      dockerfile: Dockerfile
     image: ghcr.io/thecuriousforge/member-engagement-backend:latest
     container_name: member-engagement-backend
     restart: unless-stopped
@@ -63,6 +64,9 @@ services:
       - "traefik.docker.network=traefik"
 
   frontend:
+    build:
+      context: ./packages/frontend
+      dockerfile: Dockerfile
     image: ghcr.io/thecuriousforge/member-engagement-frontend:latest
     container_name: member-engagement-frontend
     restart: unless-stopped
