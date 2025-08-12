@@ -39,7 +39,9 @@ export default defineConfig({
 		host: '0.0.0.0',
 		allowedHosts: [
 			'signin.thecuriousforge.org',
-			'.thecuriousforge.org'
+			'.thecuriousforge.org',
+			'localhost',
+			'127.0.0.1'
 		],
 	}
 });
