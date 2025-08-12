@@ -74,9 +74,11 @@ self.addEventListener('fetch', (event) => {
 				return (
 					response ||
 					fetch(event.request).then((fetchResponse) => {
+						// Clone the response before using it
+						const responseToCache = fetchResponse.clone();
 						// Store in cache
 						caches.open(CACHE_NAME).then((cache) => {
-							cache.put(event.request, fetchResponse.clone());
+							cache.put(event.request, responseToCache);
 						});
 						return fetchResponse;
 					})
