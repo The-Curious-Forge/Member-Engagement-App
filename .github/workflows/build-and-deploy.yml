@@ -101,18 +101,43 @@ jobs:
           port: 22
           timeout: 30s
           command_timeout: 10m
+          envs: GITHUB_TOKEN,GITHUB_ACTOR,GITHUB_REPOSITORY
           script: |
             echo "Starting deployment..."
             cd /opt/member-engagement-app || { echo "Application directory not found"; exit 1; }
 
+            echo "Logging into GitHub Container Registry..."
+            echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+            echo "Stopping existing containers..."
+            docker-compose -f docker-compose.prod.yml down
+
+            echo "Removing old images to force fresh pull..."
+            docker image rm "ghcr.io/$GITHUB_REPOSITORY-frontend:live" 2>/dev/null || true
+            docker image rm "ghcr.io/$GITHUB_REPOSITORY-backend:live" 2>/dev/null || true
+            docker image rm "ghcr.io/$GITHUB_REPOSITORY-frontend:latest" 2>/dev/null || true
+            docker image rm "ghcr.io/$GITHUB_REPOSITORY-backend:latest" 2>/dev/null || true
+
             echo "Pulling latest Docker images..."
             docker-compose -f docker-compose.prod.yml pull
 
-            echo "Starting services..."
+            echo "Starting services with fresh images..."
             docker-compose -f docker-compose.prod.yml up -d
+
+            echo "Waiting for services to be ready..."
+            sleep 15
+
+            echo "Verifying deployment..."
+            docker-compose -f docker-compose.prod.yml ps
 
             echo "Cleaning up unused Docker resources..."
             docker system prune -f
 
+            echo "Logging out of GitHub Container Registry..."
+            docker logout ghcr.io
+
             echo "Deployment completed successfully!"
-            docker-compose -f docker-compose.prod.yml ps
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
