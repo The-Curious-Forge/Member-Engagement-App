@@ -115,8 +115,8 @@ jobs:
             cp docker-compose.prod.yml docker-compose.deploy.yml
 
             echo "Updating image tags to use 'live' tag..."
-            sed -i "s/:latest/:live/g" docker-compose.deploy.yml
-            sed -i "s/\${IMAGE_TAG:-latest}/live/g" docker-compose.deploy.yml
+            sed -i "s|ghcr.io/\${GITHUB_REPOSITORY:-thecuriousforge/member-engagement-app}-frontend:\${IMAGE_TAG:-latest}|ghcr.io/\${GITHUB_REPOSITORY:-thecuriousforge/member-engagement-app}-frontend:live|g" docker-compose.deploy.yml
+            sed -i "s|ghcr.io/\${GITHUB_REPOSITORY:-thecuriousforge/member-engagement-app}-backend:\${IMAGE_TAG:-latest}|ghcr.io/\${GITHUB_REPOSITORY:-thecuriousforge/member-engagement-app}-backend:live|g" docker-compose.deploy.yml
 
             echo "Stopping existing containers..."
             docker-compose -f docker-compose.deploy.yml down
