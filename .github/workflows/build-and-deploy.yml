@@ -17,9 +17,20 @@ jobs:
     outputs:
       frontend: ${{ steps.changes.outputs.frontend }}
       backend: ${{ steps.changes.outputs.backend }}
+      force_deploy: ${{ steps.check-branch.outputs.force_deploy }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Check if this is a live branch push
+        id: check-branch
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/live" && "${{ github.event_name }}" == "push" ]]; then
+            echo "force_deploy=true" >> $GITHUB_OUTPUT
+            echo "Live branch push detected - forcing build of all components"
+          else
+            echo "force_deploy=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Check for changes
         uses: dorny/paths-filter@v2
@@ -28,12 +39,17 @@ jobs:
           filters: |
             frontend:
               - 'packages/frontend/**'
+              - '.github/workflows/**'
+              - 'docker-compose.prod.yml'
+              - '.env.example'
             backend:
               - 'packages/backend/**'
+              - '.github/workflows/**'
+              - 'docker-compose.prod.yml'
 
   build-frontend:
     needs: changes
-    if: ${{ needs.changes.outputs.frontend == 'true' }}
+    if: ${{ needs.changes.outputs.frontend == 'true' || needs.changes.outputs.force_deploy == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -74,12 +90,13 @@ jobs:
           labels: ${{ steps.meta-frontend.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          no-cache: ${{ github.ref == 'refs/heads/live' }}
           provenance: false
           sbom: false
 
   build-backend:
     needs: changes
-    if: ${{ needs.changes.outputs.backend == 'true' }}
+    if: ${{ needs.changes.outputs.backend == 'true' || needs.changes.outputs.force_deploy == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -120,6 +137,7 @@ jobs:
           labels: ${{ steps.meta-backend.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          no-cache: ${{ github.ref == 'refs/heads/live' }}
           provenance: false
           sbom: false
 
@@ -173,7 +191,10 @@ jobs:
             echo "Pulling latest Docker images..."
             docker-compose -f docker-compose.prod.yml pull
 
-            echo "Starting/restarting services with updated images..."
+            echo "Stopping current services..."
+            docker-compose -f docker-compose.prod.yml down
+
+            echo "Starting services with updated images..."
             docker-compose -f docker-compose.prod.yml up -d
 
             echo "Waiting for services to be ready..."
