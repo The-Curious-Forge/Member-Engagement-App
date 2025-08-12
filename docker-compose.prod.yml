@@ -11,7 +11,7 @@ services:
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
       - --certificatesresolvers.letsencrypt.acme.email=supportag@thecuriousforge.org
-      - --certificatesresolvers.letsencrypt.acme.storage=/acme.json
+      - --certificatesresolvers.letsencrypt.acme.storage=/data/acme.json
       - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
       - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
       - --log.level=INFO
@@ -22,7 +22,7 @@ services:
       - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - traefik-acme:/acme.json
+      - traefik-acme:/data
     networks:
       - traefik
     labels:
@@ -61,7 +61,7 @@ services:
       - "traefik.http.routers.backend.entrypoints=websecure"
       - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
       - "traefik.http.services.backend.loadbalancer.server.port=3000"
-      - "traefik.docker.network=traefik"
+      - "traefik.docker.network=member-engagement-app_traefik"
 
   frontend:
     build:
@@ -83,7 +83,7 @@ services:
       - "traefik.http.routers.frontend.entrypoints=websecure"
       - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
       - "traefik.http.services.frontend.loadbalancer.server.port=5174"
-      - "traefik.docker.network=traefik"
+      - "traefik.docker.network=member-engagement-app_traefik"
 
   portainer:
     image: portainer/portainer-ce:latest
@@ -100,7 +100,7 @@ services:
       - "traefik.http.routers.portainer.entrypoints=websecure"
       - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
       - "traefik.http.services.portainer.loadbalancer.server.port=9000"
-      - "traefik.docker.network=traefik"
+      - "traefik.docker.network=member-engagement-app_traefik"
 
   watchtower:
     image: containrrr/watchtower:latest
