@@ -12,7 +12,28 @@ env:
   IMAGE_NAME_BACKEND: ${{ github.repository }}-backend
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.changes.outputs.frontend }}
+      backend: ${{ steps.changes.outputs.backend }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for changes
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            frontend:
+              - 'packages/frontend/**'
+            backend:
+              - 'packages/backend/**'
+
   build-frontend:
+    needs: changes
+    if: ${{ needs.changes.outputs.frontend == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -57,6 +78,8 @@ jobs:
           sbom: false
 
   build-backend:
+    needs: changes
+    if: ${{ needs.changes.outputs.backend == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -101,9 +124,9 @@ jobs:
           sbom: false
 
   deploy:
-    needs: [build-frontend, build-backend]
+    needs: [changes, build-frontend, build-backend]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/live' && github.event_name == 'push'
+    if: always() && github.ref == 'refs/heads/live' && github.event_name == 'push' && (needs.build-frontend.result == 'success' || needs.build-frontend.result == 'skipped') && (needs.build-backend.result == 'success' || needs.build-backend.result == 'skipped')
 
     steps:
       - name: Deploy to production
