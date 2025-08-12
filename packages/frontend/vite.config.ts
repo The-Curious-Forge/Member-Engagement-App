@@ -37,6 +37,6 @@ export default defineConfig({
 		port: 5174,
 		strictPort: true,
 		host: true,
-		allowedHosts: ['signin.thecuriousforge.org', 'localhost', '64.23.142.177']
+		allowedHosts: 'all'
 	}
 });
