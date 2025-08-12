@@ -31,4 +31,4 @@ COPY --from=build /app/node_modules ./node_modules
 EXPOSE 5174
 
 # Use the SvelteKit preview server with explicit host and port
-CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "5174"]
+CMD ["npm", "run", "preview"]
