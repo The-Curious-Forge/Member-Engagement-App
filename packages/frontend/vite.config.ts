@@ -7,7 +7,6 @@ export default defineConfig({
 		port: 5174,
 		host: true,
 		strictPort: true,
-		allowedHosts: true,
 		proxy: {
 			'/api': {
 				target: 'http://backend:3000',
@@ -38,6 +37,9 @@ export default defineConfig({
 		port: 5174,
 		strictPort: true,
 		host: '0.0.0.0',
-		allowedHosts: true,
+		allowedHosts: [
+			'signin.thecuriousforge.org',
+			'.thecuriousforge.org'
+		],
 	}
 });
