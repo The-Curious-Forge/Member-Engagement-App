@@ -23,10 +23,12 @@ WORKDIR /app
 RUN npm install -g serve
 
 # Copy built assets from build stage
-COPY --from=build /app/build /app/build
+COPY --from=build /app/.svelte-kit /app/.svelte-kit
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/node_modules ./node_modules
 
 # Expose the port
 EXPOSE 5174
 
-# Serve the static files with SPA support
-CMD ["serve", "-s", "build", "-l", "5174", "--host", "0.0.0.0"]
+# Use the SvelteKit preview server
+CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "5174"]
