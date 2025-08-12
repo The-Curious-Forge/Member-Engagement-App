@@ -54,16 +54,17 @@ services:
       - app-network
     labels:
       - "traefik.enable=true"
-      # API routes
       - "traefik.http.routers.backend.rule=Host(`signin.thecuriousforge.org`) && PathPrefix(`/api`)"
       - "traefik.http.routers.backend.entrypoints=websecure"
       - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
       - "traefik.http.routers.backend.priority=2"
-      # Socket.IO routes
+      - "traefik.http.routers.backend.service=backend"
+      # Socket.IO WebSocket routing
       - "traefik.http.routers.backend-websocket.rule=Host(`signin.thecuriousforge.org`) && PathPrefix(`/socket.io`)"
       - "traefik.http.routers.backend-websocket.entrypoints=websecure"
       - "traefik.http.routers.backend-websocket.tls.certresolver=letsencrypt"
       - "traefik.http.routers.backend-websocket.priority=3"
+      - "traefik.http.routers.backend-websocket.service=backend"
       - "traefik.http.services.backend.loadbalancer.server.port=3000"
       - "traefik.docker.network=member-engagement-app_traefik"
 
