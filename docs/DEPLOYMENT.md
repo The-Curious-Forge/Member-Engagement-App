@@ -65,29 +65,13 @@ Configure the following DNS records in Cloudflare (or your DNS provider):
 
 ## 3. Environment Configuration
 
-### Create production environment file
+**IMPORTANT**: Environment variables are now managed automatically via GitHub Secrets. The deployment process creates the `.env` file from GitHub repository secrets.
 
-```bash
-cd /opt/member-engagement-app
-cp .env.example .env
-```
+### ⚠️ Manual .env Creation No Longer Required
 
-Edit `.env` with your production values:
+The `.env` file is automatically generated during deployment from GitHub Secrets. **Do not manually create or modify the `.env` file** as it will be overwritten on each deployment.
 
-```bash
-# Airtable Configuration
-AIRTABLE_API_KEY=your_production_airtable_api_key
-AIRTABLE_BASE_ID=your_production_airtable_base_id
-
-# Google API Configuration
-GOOGLE_API_KEY=your_production_google_api_key
-GOOGLE_CALENDAR_ID=your_production_google_calendar_id
-
-# Node Environment
-NODE_ENV=production
-```
-
-**Security Note:** Never commit the `.env` file to version control. Keep it secure on the server only.
+**Security Note:** All sensitive configuration is now managed through GitHub Secrets, providing better security and preventing accidental exposure of credentials.
 
 ## 4. GitHub Setup
 
@@ -95,11 +79,37 @@ NODE_ENV=production
 
 In your GitHub repository, go to Settings → Secrets and variables → Actions, and add:
 
+#### Server Access Secrets
+
 | Secret Name           | Description           | Example                                  |
 | --------------------- | --------------------- | ---------------------------------------- |
 | `PRODUCTION_HOST`     | Server IP or hostname | `123.456.789.123`                        |
 | `PRODUCTION_USERNAME` | SSH username          | `ubuntu`                                 |
 | `PRODUCTION_SSH_KEY`  | Private SSH key       | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
+
+#### Application Configuration Secrets
+
+| Secret Name          | Description              | Example                |
+| -------------------- | ------------------------ | ---------------------- |
+| `AIRTABLE_API_KEY`   | Your Airtable API key    | `pat123abc...`         |
+| `AIRTABLE_BASE_ID`   | Your Airtable base ID    | `app123ABC...`         |
+| `GOOGLE_API_KEY`     | Your Google API key      | `AIza123abc...`        |
+| `GOOGLE_CALENDAR_ID` | Your Google Calendar ID  | `calendar@example.com` |
+| `NODE_ENV`           | Node environment setting | `production`           |
+
+### How Environment Variables Work
+
+1. **GitHub Secrets**: All sensitive configuration is stored as GitHub repository secrets
+2. **Automatic Generation**: During deployment, the GitHub Actions workflow creates a `.env` file from these secrets
+3. **No Manual Management**: You never need to manually create or edit the `.env` file on the server
+4. **Security**: Secrets are encrypted and only accessible during deployment
+
+### To Update Environment Variables
+
+1. Go to your GitHub repository
+2. Navigate to Settings → Secrets and variables → Actions
+3. Update the relevant secret value
+4. Push to `live` branch to trigger deployment with new values
 
 ### Generate SSH Key for Deployment
 
