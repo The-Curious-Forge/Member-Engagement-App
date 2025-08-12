@@ -120,40 +120,43 @@ jobs:
             echo "Starting deployment..."
             cd /opt/member-engagement-app || { echo "Application directory not found"; exit 1; }
 
+            echo "Pulling latest code from live branch..."
+            git pull origin live
+
             echo "Logging into GitHub Container Registry..."
             echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
             echo "Using latest images from live branch (no custom tags)..."
             echo "Copying production docker-compose and setting variables..."
 
-            # Set environment variables and use original docker-compose
-            export GITHUB_REPOSITORY="$GITHUB_REPOSITORY"
+            # Convert repository name to lowercase for Docker compatibility
+            export GITHUB_REPOSITORY_LOWER=$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')
             export IMAGE_TAG="latest"
 
-            # Use the original docker-compose file with environment variable substitution
-            cp docker-compose.prod.yml docker-compose.deploy.yml
+            # Use envsubst to properly substitute environment variables
+            envsubst < docker-compose.prod.yml > docker-compose.deploy.yml
 
             echo "Images that will be used:"
             grep "image:" docker-compose.deploy.yml
 
             echo "Stopping existing containers..."
-            GITHUB_REPOSITORY="$GITHUB_REPOSITORY" IMAGE_TAG="latest" docker-compose -f docker-compose.deploy.yml down
+            docker-compose -f docker-compose.deploy.yml down
 
             echo "Removing old images to force fresh pull..."
-            docker image rm "ghcr.io/$GITHUB_REPOSITORY-frontend:latest" 2>/dev/null || true
-            docker image rm "ghcr.io/$GITHUB_REPOSITORY-backend:latest" 2>/dev/null || true
+            docker image rm "ghcr.io/$GITHUB_REPOSITORY_LOWER-frontend:latest" 2>/dev/null || true
+            docker image rm "ghcr.io/$GITHUB_REPOSITORY_LOWER-backend:latest" 2>/dev/null || true
 
             echo "Pulling latest Docker images..."
-            GITHUB_REPOSITORY="$GITHUB_REPOSITORY" IMAGE_TAG="latest" docker-compose -f docker-compose.deploy.yml pull
+            docker-compose -f docker-compose.deploy.yml pull
 
             echo "Starting services with fresh images..."
-            GITHUB_REPOSITORY="$GITHUB_REPOSITORY" IMAGE_TAG="latest" docker-compose -f docker-compose.deploy.yml up -d
+            docker-compose -f docker-compose.deploy.yml up -d
 
             echo "Waiting for services to be ready..."
             sleep 15
 
             echo "Verifying deployment..."
-            GITHUB_REPOSITORY="$GITHUB_REPOSITORY" IMAGE_TAG="latest" docker-compose -f docker-compose.deploy.yml ps
+            docker-compose -f docker-compose.deploy.yml ps
 
             echo "Cleaning up deployment file..."
             rm docker-compose.deploy.yml
