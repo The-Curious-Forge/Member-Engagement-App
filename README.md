@@ -13,6 +13,7 @@ Quick links
 ## Table of contents
 
 - [Quickstart](#quickstart)
+- [Deployment](#deployment)
 - [Environment variables](#environment-variables)
 - [Architecture overview](#architecture-overview)
 - [Key concepts](#key-concepts)
@@ -59,6 +60,53 @@ cd packages/frontend
 npm install
 npm run dev
 ```
+
+## Deployment
+
+**Quick deployment (~12 minutes):** See [`QUICK_DEPLOY.md`](QUICK_DEPLOY.md)
+
+**Full deployment guide:** See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
+
+### Production Architecture
+
+- **Ubuntu Server** with Docker and Docker Compose
+- **Traefik** reverse proxy with automatic TLS (Let's Encrypt)
+- **Portainer** for container management UI
+- **Watchtower** for automatic container updates
+- **GitHub Actions** for CI/CD pipeline
+- **GitHub Container Registry** for Docker images
+
+### Quick Setup
+
+1. **Server Setup:**
+
+   ```bash
+   git clone https://github.com/YOUR_USERNAME/Member-Engagement-App.git
+   cd Member-Engagement-App
+   ./scripts/deploy-setup.sh
+   ```
+
+2. **DNS Configuration:**
+
+   - `signin.thecuriousforge.org` → Your server IP
+   - `portainer.thecuriousforge.org` → Your server IP
+
+3. **GitHub Secrets:**
+
+   - `PRODUCTION_HOST`: Server IP
+   - `PRODUCTION_USERNAME`: SSH username
+   - `PRODUCTION_SSH_KEY`: SSH private key
+
+4. **Deploy:**
+   ```bash
+   git push origin live  # Triggers automatic deployment
+   ```
+
+### Services
+
+- **App**: https://signin.thecuriousforge.org
+- **Portainer**: https://portainer.thecuriousforge.org
+- **Traefik Dashboard**: https://traefik.thecuriousforge.org:8080
 
 ## Environment variables
 
