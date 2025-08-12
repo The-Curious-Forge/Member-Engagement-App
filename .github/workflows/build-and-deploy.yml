@@ -111,11 +111,15 @@ jobs:
             echo "Logging into GitHub Container Registry..."
             echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
-            echo "Setting image tag to: live"
-            export IMAGE_TAG=live
+            echo "Creating deployment-specific docker-compose file..."
+            cp docker-compose.prod.yml docker-compose.deploy.yml
+
+            echo "Updating image tags to use 'live' tag..."
+            sed -i "s/:latest/:live/g" docker-compose.deploy.yml
+            sed -i "s/\${IMAGE_TAG:-latest}/live/g" docker-compose.deploy.yml
 
             echo "Stopping existing containers..."
-            docker-compose -f docker-compose.prod.yml down
+            docker-compose -f docker-compose.deploy.yml down
 
             echo "Removing old images to force fresh pull..."
             docker image rm "ghcr.io/$GITHUB_REPOSITORY-frontend:live" 2>/dev/null || true
@@ -123,17 +127,20 @@ jobs:
             docker image rm "ghcr.io/$GITHUB_REPOSITORY-frontend:latest" 2>/dev/null || true
             docker image rm "ghcr.io/$GITHUB_REPOSITORY-backend:latest" 2>/dev/null || true
 
-            echo "Pulling latest Docker images with tag: $IMAGE_TAG..."
-            IMAGE_TAG=live docker-compose -f docker-compose.prod.yml pull
+            echo "Pulling latest Docker images with tag: live..."
+            docker-compose -f docker-compose.deploy.yml pull
 
             echo "Starting services with fresh images..."
-            IMAGE_TAG=live docker-compose -f docker-compose.prod.yml up -d
+            docker-compose -f docker-compose.deploy.yml up -d
 
             echo "Waiting for services to be ready..."
             sleep 15
 
             echo "Verifying deployment..."
-            IMAGE_TAG=live docker-compose -f docker-compose.prod.yml ps
+            docker-compose -f docker-compose.deploy.yml ps
+
+            echo "Cleaning up deployment file..."
+            rm docker-compose.deploy.yml
 
             echo "Cleaning up unused Docker resources..."
             docker system prune -f
