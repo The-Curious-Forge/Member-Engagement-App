@@ -131,18 +131,144 @@ jobs:
             echo "Logging into GitHub Container Registry..."
             echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
-            echo "Creating deployment-specific docker-compose file..."
-            cp docker-compose.prod.yml docker-compose.deploy.yml
+            echo "Creating deployment-specific docker-compose file with live tags..."
+            # Create docker-compose.deploy.yml with hardcoded live tags
+            cat > docker-compose.deploy.yml << 'EOF'
+            services:
+              traefik:
+                image: traefik:v3.0
+                container_name: traefik
+                restart: unless-stopped
+                command:
+                  - --api.dashboard=true
+                  - --api.insecure=true
+                  - --providers.docker=true
+                  - --providers.docker.exposedbydefault=false
+                  - --entrypoints.web.address=:80
+                  - --entrypoints.websecure.address=:443
+                  - --certificatesresolvers.letsencrypt.acme.email=supportag@thecuriousforge.org
+                  - --certificatesresolvers.letsencrypt.acme.storage=/data/acme.json
+                  - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
+                  - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+                  - --log.level=INFO
+                  - --accesslog=true
+                ports:
+                  - "80:80"
+                  - "443:443"
+                  - "8080:8080"
+                volumes:
+                  - /var/run/docker.sock:/var/run/docker.sock:ro
+                  - traefik-acme:/data
+                networks:
+                  - traefik
+                labels:
+                  - "traefik.enable=true"
+                  - "traefik.http.routers.traefik.rule=Host(\`traefik.thecuriousforge.org\`)"
+                  - "traefik.http.routers.traefik.entrypoints=websecure"
+                  - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
+                  - "traefik.http.routers.traefik.service=api@internal"
+                  - "traefik.http.routers.http-catchall.rule=hostregexp(\`{host:.+}\`)"
+                  - "traefik.http.routers.http-catchall.entrypoints=web"
+                  - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
+                  - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
 
-            echo "Updating image tags to use 'live' tag..."
-            # Set environment variables for docker-compose substitution
-            export GITHUB_REPOSITORY="$GITHUB_REPOSITORY"
-            export IMAGE_TAG="live"
+              backend:
+                image: ghcr.io/$GITHUB_REPOSITORY-backend:live
+                container_name: member-engagement-backend
+                restart: unless-stopped
+                environment:
+                  - NODE_ENV=production
+                  - PORT=3000
+                  - AIRTABLE_API_KEY=${AIRTABLE_API_KEY}
+                  - AIRTABLE_BASE_ID=${AIRTABLE_BASE_ID}
+                  - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+                  - GOOGLE_CALENDAR_ID=${GOOGLE_CALENDAR_ID}
+                  - CORS_ORIGIN=https://signin.thecuriousforge.org
+                networks:
+                  - traefik
+                  - app-network
+                labels:
+                  - "traefik.enable=true"
+                  - "traefik.http.routers.backend.rule=Host(\`signin.thecuriousforge.org\`) && PathPrefix(\`/api\`)"
+                  - "traefik.http.routers.backend.entrypoints=websecure"
+                  - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+                  - "traefik.http.routers.backend.priority=2"
+                  - "traefik.http.services.backend.loadbalancer.server.port=3000"
+                  - "traefik.docker.network=member-engagement-app_traefik"
 
-            # Use envsubst to replace variables properly
-            envsubst < docker-compose.prod.yml > docker-compose.deploy.yml
+              frontend:
+                image: ghcr.io/$GITHUB_REPOSITORY-frontend:live
+                container_name: member-engagement-frontend
+                restart: unless-stopped
+                environment:
+                  - NODE_ENV=production
+                  - PORT=3000
+                networks:
+                  - traefik
+                  - app-network
+                depends_on:
+                  - backend
+                labels:
+                  - "traefik.enable=true"
+                  - "traefik.http.routers.frontend.rule=Host(\`signin.thecuriousforge.org\`)"
+                  - "traefik.http.routers.frontend.entrypoints=websecure"
+                  - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+                  - "traefik.http.routers.frontend.priority=1"
+                  - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+                  - "traefik.docker.network=member-engagement-app_traefik"
+                deploy:
+                  resources:
+                    limits:
+                      memory: 512M
+                      cpus: "0.5"
+                    reservations:
+                      memory: 256M
+                      cpus: "0.25"
 
-            echo "Updated docker-compose.deploy.yml contents:"
+              portainer:
+                image: portainer/portainer-ce:latest
+                container_name: portainer
+                restart: unless-stopped
+                volumes:
+                  - /var/run/docker.sock:/var/run/docker.sock:ro
+                  - portainer-data:/data
+                networks:
+                  - traefik
+                labels:
+                  - "traefik.enable=true"
+                  - "traefik.http.routers.portainer.rule=Host(\`portainer.thecuriousforge.org\`)"
+                  - "traefik.http.routers.portainer.entrypoints=websecure"
+                  - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
+                  - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+                  - "traefik.docker.network=member-engagement-app_traefik"
+
+              watchtower:
+                image: containrrr/watchtower:latest
+                container_name: watchtower
+                restart: unless-stopped
+                environment:
+                  - WATCHTOWER_CLEANUP=true
+                  - WATCHTOWER_POLL_INTERVAL=300
+                  - WATCHTOWER_INCLUDE_RESTARTING=true
+                  - WATCHTOWER_ROLLING_RESTART=true
+                volumes:
+                  - /var/run/docker.sock:/var/run/docker.sock:ro
+                networks:
+                  - app-network
+                command: --interval 300 member-engagement-backend member-engagement-frontend
+
+            volumes:
+              traefik-acme:
+              portainer-data:
+
+            networks:
+              traefik:
+                driver: bridge
+              app-network:
+                driver: bridge
+            EOF
+
+            echo "Created docker-compose.deploy.yml with live image tags:"
             grep "image:" docker-compose.deploy.yml
 
             echo "Stopping existing containers..."
