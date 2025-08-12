@@ -117,55 +117,36 @@ jobs:
           command_timeout: 10m
           envs: GITHUB_TOKEN,GITHUB_ACTOR,GITHUB_REPOSITORY,AIRTABLE_API_KEY,AIRTABLE_BASE_ID,GOOGLE_API_KEY,GOOGLE_CALENDAR_ID
           script: |
-            echo "Starting deployment..."
+            echo "Starting simplified deployment..."
             cd /opt/member-engagement-app || { echo "Application directory not found"; exit 1; }
 
             echo "Pulling latest code from live branch..."
             git pull origin live
 
+            echo "Creating .env file with deployment variables..."
+            cat > .env << EOF
+            GITHUB_REPOSITORY_LOWER=$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')
+            IMAGE_TAG=latest
+            AIRTABLE_API_KEY=$AIRTABLE_API_KEY
+            AIRTABLE_BASE_ID=$AIRTABLE_BASE_ID
+            GOOGLE_API_KEY=$GOOGLE_API_KEY
+            GOOGLE_CALENDAR_ID=$GOOGLE_CALENDAR_ID
+            EOF
+
             echo "Logging into GitHub Container Registry..."
             echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
-            echo "Using latest images from live branch (no custom tags)..."
-            echo "Copying production docker-compose and setting variables..."
-
-            # Convert repository name to lowercase for Docker compatibility
-            export GITHUB_REPOSITORY_LOWER=$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')
-            export IMAGE_TAG="latest"
-
-            # Export all required environment variables for envsubst
-            export AIRTABLE_API_KEY="$AIRTABLE_API_KEY"
-            export AIRTABLE_BASE_ID="$AIRTABLE_BASE_ID"
-            export GOOGLE_API_KEY="$GOOGLE_API_KEY"
-            export GOOGLE_CALENDAR_ID="$GOOGLE_CALENDAR_ID"
-
-            # Use envsubst to properly substitute environment variables
-            envsubst < docker-compose.prod.yml > docker-compose.deploy.yml
-
-            echo "Images that will be used:"
-            grep "image:" docker-compose.deploy.yml
-
-            echo "Stopping existing containers..."
-            docker-compose -f docker-compose.deploy.yml down
-
-            echo "Removing old images to force fresh pull..."
-            docker image rm "ghcr.io/$GITHUB_REPOSITORY_LOWER-frontend:latest" 2>/dev/null || true
-            docker image rm "ghcr.io/$GITHUB_REPOSITORY_LOWER-backend:latest" 2>/dev/null || true
-
             echo "Pulling latest Docker images..."
-            docker-compose -f docker-compose.deploy.yml pull
+            docker-compose -f docker-compose.prod.yml pull
 
-            echo "Starting services with fresh images..."
-            docker-compose -f docker-compose.deploy.yml up -d
+            echo "Starting/restarting services with updated images..."
+            docker-compose -f docker-compose.prod.yml up -d
 
             echo "Waiting for services to be ready..."
             sleep 15
 
             echo "Verifying deployment..."
-            docker-compose -f docker-compose.deploy.yml ps
-
-            echo "Cleaning up deployment file..."
-            rm docker-compose.deploy.yml
+            docker-compose -f docker-compose.prod.yml ps
 
             echo "Cleaning up unused Docker resources..."
             docker system prune -f

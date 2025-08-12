@@ -38,7 +38,7 @@ services:
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
 
   backend:
-    image: ghcr.io/${GITHUB_REPOSITORY_LOWER:-the-curious-forge/member-engagement-app}-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GITHUB_REPOSITORY_LOWER}-backend:${IMAGE_TAG}
     container_name: member-engagement-backend
     restart: unless-stopped
     environment:
@@ -62,7 +62,7 @@ services:
       - "traefik.docker.network=member-engagement-app_traefik"
 
   frontend:
-    image: ghcr.io/${GITHUB_REPOSITORY_LOWER:-the-curious-forge/member-engagement-app}-frontend:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GITHUB_REPOSITORY_LOWER}-frontend:${IMAGE_TAG}
     container_name: member-engagement-frontend
     restart: unless-stopped
     environment:
