@@ -38,15 +38,12 @@ services:
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
 
   backend:
-    build:
-      context: ./packages/backend
-      dockerfile: Dockerfile
-    image: ghcr.io/thecuriousforge/member-engagement-backend:latest
+    image: ghcr.io/${GITHUB_REPOSITORY:-thecuriousforge/member-engagement-app}-backend:latest
     container_name: member-engagement-backend
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - PORT=3001
+      - PORT=3000
       - AIRTABLE_API_KEY=${AIRTABLE_API_KEY}
       - AIRTABLE_BASE_ID=${AIRTABLE_BASE_ID}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
@@ -61,14 +58,11 @@ services:
       - "traefik.http.routers.backend.entrypoints=websecure"
       - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
       - "traefik.http.routers.backend.priority=2"
-      - "traefik.http.services.backend.loadbalancer.server.port=3001"
+      - "traefik.http.services.backend.loadbalancer.server.port=3000"
       - "traefik.docker.network=member-engagement-app_traefik"
 
   frontend:
-    build:
-      context: ./packages/frontend
-      dockerfile: Dockerfile
-    image: ghcr.io/thecuriousforge/member-engagement-frontend:latest
+    image: ghcr.io/${GITHUB_REPOSITORY:-thecuriousforge/member-engagement-app}-frontend:latest
     container_name: member-engagement-frontend
     restart: unless-stopped
     environment:
