@@ -60,6 +60,7 @@ services:
       - "traefik.http.routers.backend.rule=Host(`signin.thecuriousforge.org`) && PathPrefix(`/api`)"
       - "traefik.http.routers.backend.entrypoints=websecure"
       - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.backend.priority=2"
       - "traefik.http.services.backend.loadbalancer.server.port=3000"
       - "traefik.docker.network=member-engagement-app_traefik"
 
@@ -82,6 +83,7 @@ services:
       - "traefik.http.routers.frontend.rule=Host(`signin.thecuriousforge.org`)"
       - "traefik.http.routers.frontend.entrypoints=websecure"
       - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.frontend.priority=1"
       - "traefik.http.services.frontend.loadbalancer.server.port=5174"
       - "traefik.docker.network=member-engagement-app_traefik"
 
