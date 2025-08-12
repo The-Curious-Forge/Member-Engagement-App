@@ -135,13 +135,12 @@ jobs:
             cp docker-compose.prod.yml docker-compose.deploy.yml
 
             echo "Updating image tags to use 'live' tag..."
-            # Set environment variables for the correct repository and tag
+            # Set environment variables for docker-compose substitution
             export GITHUB_REPOSITORY="$GITHUB_REPOSITORY"
             export IMAGE_TAG="live"
 
-            # Replace the image references with actual values
-            sed -i "s|ghcr.io/\${GITHUB_REPOSITORY:-thecuriousforge/member-engagement-app}-frontend:\${IMAGE_TAG:-latest}|ghcr.io/$GITHUB_REPOSITORY-frontend:live|g" docker-compose.deploy.yml
-            sed -i "s|ghcr.io/\${GITHUB_REPOSITORY:-thecuriousforge/member-engagement-app}-backend:\${IMAGE_TAG:-latest}|ghcr.io/$GITHUB_REPOSITORY-backend:live|g" docker-compose.deploy.yml
+            # Use envsubst to replace variables properly
+            envsubst < docker-compose.prod.yml > docker-compose.deploy.yml
 
             echo "Updated docker-compose.deploy.yml contents:"
             grep "image:" docker-compose.deploy.yml
