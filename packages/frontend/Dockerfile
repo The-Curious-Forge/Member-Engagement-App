@@ -5,8 +5,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies (use npm install since package-lock.json is out of sync)
-RUN npm install
+# Install dependencies with optimizations
+RUN npm ci
 
 # Copy application code
 COPY . .
@@ -14,15 +14,17 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Production stage - use simple static server
+# Production stage
 FROM node:18-alpine as production
 
 WORKDIR /app
 
-# Copy built application from build stage
+# Copy built application and package.json
 COPY --from=build /app/build ./build
 COPY --from=build /app/package.json ./package.json
-COPY --from=build /app/node_modules ./node_modules
+
+# Install only production dependencies with optimizations
+RUN npm install --only=production --no-audit --no-fund --prefer-offline && npm cache clean --force
 
 # Expose the port
 EXPOSE 3000
