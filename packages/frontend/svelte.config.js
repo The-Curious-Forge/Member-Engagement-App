@@ -10,7 +10,12 @@ const config = {
 
 	kit: {
 		adapter: adapter({
-			out: 'build'
+			// Output directory for the server build
+			out: 'build',
+			// Enable precompressed files for better performance
+			precompress: true,
+			// Environment variables prefix
+			envPrefix: ''
 		})
 	},
 

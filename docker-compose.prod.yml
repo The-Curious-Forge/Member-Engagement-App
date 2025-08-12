@@ -73,11 +73,32 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
+      - PORT=3000
     networks:
       - traefik
       - app-network
     depends_on:
       - backend
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://localhost:3000', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+        reservations:
+          memory: 256M
+          cpus: "0.25"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.frontend.rule=Host(`signin.thecuriousforge.org`)"

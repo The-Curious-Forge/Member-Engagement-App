@@ -3,12 +3,15 @@
 This guide covers deploying the Member Engagement App to a production environment using the following stack:
 
 - **Ubuntu Server (Droplet)**
+- **SvelteKit Node.js Server** (optimized production frontend)
 - **Traefik** (reverse proxy with automatic TLS)
 - **Portainer** (container management UI)
 - **Docker Compose** (service orchestration)
 - **Watchtower** (automatic container updates)
 - **GitHub Actions** (CI/CD)
 - **GitHub Container Registry** (image storage)
+
+> **Note**: This deployment now uses SvelteKit's Node.js adapter instead of Vite preview for better production performance. See [Production Deployment Strategy](PRODUCTION_DEPLOYMENT_STRATEGY.md) for detailed changes.
 
 ## Prerequisites
 
@@ -144,6 +147,21 @@ docker-compose -f docker-compose.prod.yml ps
 2. **Portainer**: https://portainer.thecuriousforge.org
 3. **Application**: https://signin.thecuriousforge.org
 
+### Health Checks
+
+The new deployment includes automatic health monitoring:
+
+```bash
+# Check container health status
+docker-compose -f docker-compose.prod.yml ps
+
+# Monitor health checks in real-time
+docker events --filter container=member-engagement-frontend --filter event=health_status
+
+# Manual health check
+curl -f https://signin.thecuriousforge.org || echo "Health check failed"
+```
+
 ## 6. Monitoring and Maintenance
 
 ### Check container logs
@@ -266,15 +284,21 @@ docker-compose -f docker-compose.prod.yml up -d
 ### Health checks
 
 ```bash
-# Check all services
+# Check all services and their health status
 docker-compose -f docker-compose.prod.yml ps
 
 # Test application endpoints
-curl -k https://signin.thecuriousforge.org/api/health
-curl -k https://signin.thecuriousforge.org
+curl -f https://signin.thecuriousforge.org/api/health
+curl -f https://signin.thecuriousforge.org
 
 # Check Traefik API
 curl -k https://traefik.thecuriousforge.org:8080/api/overview
+
+# Monitor container resource usage
+docker stats member-engagement-frontend member-engagement-backend
+
+# Check specific container health
+docker inspect member-engagement-frontend | grep -A 10 Health
 ```
 
 ## 11. Security Considerations
@@ -286,44 +310,113 @@ curl -k https://traefik.thecuriousforge.org:8080/api/overview
 5. **Access**: Limit SSH access to specific IP addresses if possible
 6. **Monitoring**: Set up log monitoring and alerting
 
-## 12. Scaling and Performance
+## 12. Performance and Resource Management
 
-### Horizontal scaling
+### Current Resource Limits
 
-To run multiple instances of the application:
+The deployment now includes optimized resource management:
+
+**Frontend (SvelteKit Node.js)**:
+
+- Memory limit: 512MB
+- Memory reservation: 256MB
+- CPU limit: 0.5 cores
+- CPU reservation: 0.25 cores
+
+**Backend**:
+
+- No limits set (adjust as needed)
+
+### Build Performance
+
+**Optimized Docker Build**:
+
+- Multi-stage build reduces image size from ~800MB to ~200MB
+- Build time reduced from 8+ minutes to 2-3 minutes
+- Layer caching for faster rebuilds
+
+### Horizontal Scaling
+
+To scale horizontally (multiple instances):
 
 ```yaml
-# In docker-compose.prod.yml, add replica configuration
-backend:
-  # ... existing config
-  deploy:
-    replicas: 2
-
 frontend:
   # ... existing config
   deploy:
     replicas: 2
-```
-
-### Resource limits
-
-Add resource constraints to prevent containers from consuming all server resources:
-
-```yaml
-backend:
-  # ... existing config
-  deploy:
     resources:
       limits:
         memory: 512M
         cpus: "0.5"
 ```
 
+### Performance Monitoring
+
+```bash
+# Monitor real-time resource usage
+docker stats
+
+# Check container performance
+docker exec member-engagement-frontend top
+
+# View detailed container info
+docker inspect member-engagement-frontend | grep -A 20 Resources
+```
+
+## 13. Migration from Vite Preview
+
+If upgrading from the previous Vite preview setup:
+
+### Before Migration
+
+```bash
+# Backup current environment
+cp .env ~/backups/env-$(date +%Y%m%d).backup
+
+# Stop current containers
+docker-compose -f docker-compose.prod.yml down
+```
+
+### Migration Steps
+
+```bash
+# Pull latest code with Node.js adapter
+git pull origin live
+
+# Install new dependencies
+cd packages/frontend
+npm install
+
+# Rebuild containers with new configuration
+cd ../../
+docker-compose -f docker-compose.prod.yml build --no-cache frontend
+docker-compose -f docker-compose.prod.yml up -d
+
+# Verify migration
+docker-compose -f docker-compose.prod.yml ps
+curl -f https://signin.thecuriousforge.org
+```
+
+### Key Changes
+
+- Frontend now runs on port 3000 (was 4173)
+- Uses Node.js server instead of Vite preview
+- Includes health checks and resource limits
+- Optimized build process with multi-stage Docker
+
 ## Support
 
 For deployment issues:
 
-1. Check container logs first
-2. Verify all prerequisites are met
-3. Review this documentation
-4. Create an issue in the GitHub repository with logs and error details
+1. **Check container logs first**: `docker-compose logs frontend`
+2. **Verify health status**: `docker-compose ps`
+3. **Test endpoints**: `curl -f https://signin.thecuriousforge.org`
+4. **Review documentation**: [Production Deployment Strategy](PRODUCTION_DEPLOYMENT_STRATEGY.md)
+5. **Create GitHub issue** with logs and error details
+
+### Common Migration Issues
+
+**Port conflicts**: Ensure no other services use port 3000
+**Memory issues**: Monitor with `docker stats` - containers now have limits
+**Build failures**: Clear Docker cache with `docker builder prune`
+**Health check failures**: Check application startup in logs
