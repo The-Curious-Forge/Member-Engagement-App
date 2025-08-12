@@ -30,5 +30,5 @@ COPY --from=build /app/node_modules ./node_modules
 # Expose the port
 EXPOSE 5174
 
-# Use the SvelteKit preview server with explicit host, port, and allowed hosts
-CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "5174", "--allowed-hosts", "signin.thecuriousforge.org,.thecuriousforge.org,localhost,127.0.0.1"]
+# Use the SvelteKit preview server with configuration from vite.config.ts
+CMD ["npm", "run", "preview"]
